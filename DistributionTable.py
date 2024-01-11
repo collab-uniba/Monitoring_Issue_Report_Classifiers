@@ -6,39 +6,39 @@ base_path = "CSV/"
 # Path Mapped files
 mapped_folder = os.path.join(base_path, "MAPPED/")
 
-# Inizializza una lista per memorizzare le informazioni di ogni file
+# Initializes a list to store information for each file
 file_info_list = []
 
-# Somme totali inizializzate a zero
+# Total sums initialized to zero
 total_bug_count = 0
 total_enhancement_count = 0
 total_question_count = 0
 
-# Itera su ogni file nella cartella
+# Iterate over each file in the folder
 for filename_input in os.listdir(mapped_folder):
-    # Costruisci il percorso completo del file
+    # Build the full path to the file
     input_csv_filename = os.path.join(mapped_folder, filename_input)
 
-    # Carica il CSV in un DataFrame
+    # Load the CSV into a DataFrame
     df = pd.read_csv(input_csv_filename)
 
-    # Converte la colonna 'date' in formato datetime considerando il fuso orario
+    # Converts the 'date' column to datetime format
     df['date'] = pd.to_datetime(df['date'], errors='coerce', utc=True)
 
-    # Estrai l'anno massimo dalla colonna 'date' escludendo i valori NaT (Not a Time)
+    # Extract the minimum year from the 'date' column excluding NaT (Not a Time) values
     max_year = df['date'].dt.year.min(skipna=True)
 
-    # Calcola le occorrenze delle label per l'intero file
+    # Calculate label occurrences for the entire file
     bug_count = (df['label'].str.lower() == 'bug').sum()
     enhancement_count = (df['label'].str.lower() == 'enhancement').sum()
     question_count = (df['label'].str.lower() == 'question').sum()
 
-    # Aggiorna le somme totali
+    # Update totals
     total_bug_count += bug_count
     total_enhancement_count += enhancement_count
     total_question_count += question_count
 
-    # Aggiungi le informazioni del file alla lista
+    # Add the file information to the list
     file_info_list.append({
         'Jira Name': os.path.splitext(filename_input)[0],
         'Year': int(max_year),
@@ -47,22 +47,22 @@ for filename_input in os.listdir(mapped_folder):
         'Question': question_count
     })
 
-# Aggiungi una nuova riga alla lista con le somme totali
+# Add a new row to the list with total sums
 file_info_list.insert(0, {
     'Jira Name': 'Total',
-    'Year': '',  # Puoi lasciarlo vuoto o mettere un valore appropriato
+    'Year': '', 
     'Bug': total_bug_count,
     'Enhancement': total_enhancement_count,
     'Question': total_question_count
 })
 
-# Crea un DataFrame dalle informazioni della lista
+# Create a DataFrame from the list information
 distribution_table = pd.DataFrame(file_info_list)
 
 # Create the 'DISTRIBUTION/' directory if it doesn't exist
 os.makedirs("DISTRIBUTION", exist_ok=True)
-# Salva la tabella di distribuzione in un nuovo file CSV
+# Save the distribution table to a new CSV file
 distribution_table.to_csv('DISTRIBUTION/distribution_table.csv', index=False)
 
-# Visualizza la tabella di distribuzione
+# View the distribution table
 print(distribution_table)

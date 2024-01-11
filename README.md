@@ -11,7 +11,7 @@ This set of tools facilitates the extraction and preprocessing of data from the 
 ### 1. Extract Data from MongoDB Compass
 
 1. Open MongoDB Compass.
-2. For each collection in the JiraRepos database, execute the following query in the "Project" field:
+2. Run the `MongoExport.py` tool for each collection in the JiraRepos database. The tool automates the extraction process and uses the following query in the "Project" field:
 
     ```json
     {
@@ -23,13 +23,7 @@ This set of tools facilitates the extraction and preprocessing of data from the 
     }
     ```
 
-3. Export the query results to a CSV file using the "Export Query Results" function in MongoDB Compass.
-
-### 2. Organize Data in the Project Directory
-
-1. Place the exported CSV files in the "CSV" folder within the project directory.
-
-### 3. Clean and Map Labels
+### 2. Clean and Map Labels
 
 1. Run the `CleanCSV.py` tool to preprocess the CSV files.
    
@@ -43,7 +37,7 @@ This set of tools facilitates the extraction and preprocessing of data from the 
     python LabelMapping.py
     ```
 
-### 4. Generate Distribution Table
+### 3. Generate Distribution Table
 
 1. Run the `DistributionTable.py` tool to generate the distribution table.
    

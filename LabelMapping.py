@@ -85,7 +85,7 @@ for filename_input in input_files:
                     csv_writer.writerow(row)
                 else:
                     # Log a warning for unmapped row
-                    logging.warning(f'Skipping unmapped row in file {filename_input} for label: {row[label_index]}')
+                    logging.warning(f'Skipping unmapped row in file {filename_input}: {row}')
 
     logging.info(f'The data in "{filename_input}" have been successfully exported to {output_csv_filename}')
 
