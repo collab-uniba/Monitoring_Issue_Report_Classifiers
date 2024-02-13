@@ -10,25 +10,21 @@ logging.getLogger().setLevel(logging.INFO)
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(console_handler)
-# Create the 'logs/' directory if it doesn't exist
-os.makedirs("logs", exist_ok=True)
-# Add a handler to write WARNING level messages to a file
-file_handler = logging.FileHandler('logs/warning_mapping.log')
-file_handler.setLevel(logging.WARNING)
-logging.getLogger().addHandler(file_handler)
 
 # Set the field limit to a larger value
 csv.field_size_limit(min(2147483647, sys.maxsize))
-# Base Path CSV
-base_path = "CSV/"
-# Path Cleaned files
-cleaned_folder = os.path.join(base_path, "CLEANED/")
-# Path Mapped files
-mapped_folder = os.path.join(base_path, "MAPPED/")
-# Create the 'mapped_folder' directory if it doesn't exist
-os.makedirs(mapped_folder, exist_ok=True)
 # CSV extension
 csv_extension = ".csv"
+# Base Path
+base_path = 'CSV/'
+# CSV Path
+csv_path = os.path.join(base_path,'ID-MAP/')
+# Path Cleaned files
+cleaned_folder = os.path.join(csv_path, "CLEANED/")
+# Path Mapped files
+mapped_folder = os.path.join(csv_path, "MAPPED/")
+# Create the 'mapped_folder' directory if it doesn't exist
+os.makedirs(mapped_folder, exist_ok=True)
 
 # Create a dictionary for substitutions
 label_mapping = {
@@ -36,6 +32,9 @@ label_mapping = {
     re.compile(r'.*\b(new feature|improvement|suggestion|feature request|enhancement)\b.*', flags=re.IGNORECASE): 'Enhancement',
     re.compile(r'.*\b(support request|question)\b.*', flags=re.IGNORECASE): 'Question'
 }
+
+# New field name
+mappedLabel = "mapped-label"
 
 # Get list of files in cleaned folder
 input_files = [f for f in os.listdir(cleaned_folder) if f.endswith(csv_extension)]
@@ -54,6 +53,9 @@ for filename_input in input_files:
         # Extract the first row (header)
         header = next(csv_reader)
         
+        # Add the new field to the header
+        header.append(mappedLabel)
+
         # Find the index of the 'label' column
         label_index = header.index('label')
 
@@ -70,22 +72,24 @@ for filename_input in input_files:
                 # Set a flag to indicate if the row has been mapped
                 row_mapped = False
 
-                # Perform the replacement only if the 'label' column is present
+                # Perform the addition only if the 'label' column is present
                 if label_index < len(row):
-                    # Perform "like" based substitution using regular expressions
                     current_label = row[label_index]
+                    
+                    # Initialize the 'mapped-label' field with a default value
+                    mapped_label = "Not Mapped"
+
+                    # Iterate over each substitution pattern
                     for pattern, replacement in label_mapping.items():
                         if re.match(pattern, current_label):
-                            row[label_index] = replacement
-                            row_mapped = True
+                            mapped_label = replacement
                             break
 
-                # Write the line to the output CSV file only if it has been mapped
-                if row_mapped:
+                    # Add the value of the new field to the row
+                    row.append(mapped_label)
+
+                    # Write the line to the output CSV file
                     csv_writer.writerow(row)
-                else:
-                    # Log a warning for unmapped row
-                    logging.warning(f'Skipping unmapped row in file {filename_input}: {row}')
 
     logging.info(f'The data in "{filename_input}" have been successfully exported to {output_csv_filename}')
 

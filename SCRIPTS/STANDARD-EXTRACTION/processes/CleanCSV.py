@@ -9,21 +9,17 @@ logging.getLogger().setLevel(logging.INFO)
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(console_handler)
-# Create the 'logs/' directory if it doesn't exist
-os.makedirs("logs", exist_ok=True)
-# Add a handler to write WARNING level messages to a file
-file_handler = logging.FileHandler('logs/warning_clean.log')
-file_handler.setLevel(logging.WARNING)
-logging.getLogger().addHandler(file_handler)
 
 # Set the field limit to a larger value
 csv.field_size_limit(min(2147483647, sys.maxsize))
-# Base Path CSV
-base_path = "CSV/"
-# Output folder for clean files
-cleaned_folder = "CSV/CLEANED/"
 # Extension CSV
 csv_extension = ".csv"
+# Base Path
+base_path = 'CSV/'
+# CSV Path
+csv_path = os.path.join(base_path,'STANDARD/')
+# Output folder for clean files
+cleaned_folder = os.path.join(csv_path,'CLEANED/')
 # Create the 'cleaned_folder' directory if it doesn't exist
 os.makedirs(cleaned_folder, exist_ok=True)
 

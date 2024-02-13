@@ -1,6 +1,9 @@
 import csv
-from pymongo import MongoClient
 import logging
+import os
+import sys
+
+from pymongo import MongoClient
 
 # Set the global logging level to INFO
 logging.getLogger().setLevel(logging.INFO)
@@ -18,8 +21,12 @@ db = client['JiraRepos']
 # List of collections in the database
 collections = db.list_collection_names()
 
+# Base Path
+base_path = 'CSV/'
 # Destination folder for CSV files
-output_folder = 'CSV/'
+output_folder = os.path.join(base_path,'ID-MAP/EXPORT/')
+# Create the 'CSV' directory if it doesn't exist
+os.makedirs(output_folder, exist_ok=True)
 
 # For each collection, run the query and export the results to a CSV file
 for collection_name in collections:
@@ -29,10 +36,8 @@ for collection_name in collections:
     
     project = {
         "_id": 0,
-        "fields.summary": 1,
-        "fields.description": 1,
+        "id": 1,
         "fields.issuetype.name": 1,
-        "fields.created": 1
     }
 
     # Query the collection
@@ -52,7 +57,7 @@ for collection_name in collections:
     
     # Export query results to CSV file
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ["fields.summary", "fields.description", "fields.issuetype.name", "fields.created"]
+        fieldnames = ["id","fields.issuetype.name"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         writer.writeheader()
 
@@ -60,16 +65,12 @@ for collection_name in collections:
             fields_data = document.get('fields', {})
             
             # Apply the non-printing character removal function
-            fields_summary = remove_unprintable(fields_data.get('summary', ''))
-            fields_description = remove_unprintable(fields_data.get('description', ''))
+            id = remove_unprintable(document.get('id', ''))
             fields_issuetype_name = remove_unprintable(fields_data.get('issuetype', {}).get('name', ''))
-            fields_created = remove_unprintable(fields_data.get('created', ''))
 
             writer.writerow({
-                "fields.summary": fields_summary,
-                "fields.description": fields_description,
+                "id": id,
                 "fields.issuetype.name": fields_issuetype_name,
-                "fields.created": fields_created
             })
         
 logging.info("Process completed.")

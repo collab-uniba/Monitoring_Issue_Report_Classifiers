@@ -4,10 +4,10 @@ import pandas as pd
 # Base Path CSV
 base_path = "CSV/"
 # Path Mapped files
-mapped_folder = os.path.join(base_path, "MAPPED/")
+mapped_folder = os.path.join(base_path, "STANDARD/MAPPED/")
 
-# Create the 'DISTRIBUTION/' directory if it doesn't exist
-os.makedirs("DISTRIBUTION", exist_ok=True)
+# Create the 'DISTRIBUTION-TABLE/' directory if it doesn't exist
+os.makedirs("DISTRIBUTION-TABLE", exist_ok=True)
 
 # Iterate over each file in the folder
 for filename_input in os.listdir(mapped_folder):

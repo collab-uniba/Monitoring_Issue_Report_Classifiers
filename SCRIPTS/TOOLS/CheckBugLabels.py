@@ -6,13 +6,13 @@ import re
 # Base Path CSV
 base_path = "CSV/"
 # Path Cleaned files
-cleaned_folder = os.path.join(base_path, "CLEANED/")
+cleaned_folder = os.path.join(base_path, "STANDARD/CLEANED/")
 # Path Bugs files
-bugs_folder = os.path.join(base_path, "BUGS/")
+bugs_folder = "TOOLS/OUTPUTS"
 # Create the 'BUGS/' directory if it doesn't exist
 os.makedirs(bugs_folder, exist_ok=True)
 # Output file path
-output_file_path = os.path.join(bugs_folder, "matching_labels.csv")
+output_file_path = os.path.join(bugs_folder, "bug_labels.csv")
 # CSV extension
 csv_extension = ".csv"
 

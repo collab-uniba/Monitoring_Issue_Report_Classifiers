@@ -1,11 +1,11 @@
 # Ignore all CSV files in the CSV/ directory
 CSV/*
 
-# Ignore all files in the DISTRIBUTION/ directory
-DISTRIBUTION/*
+# Ignore all files in the DISTRIBUTION-TABLE/ directory
+DISTRIBUTION-TABLE/*
 
-# Ignore all files in the logs/ directory
-logs/*
+# Ignore all files in the TOOLS/OUTPUTS/ directory
+TOOLS/OUTPUTS/*
 
 # Ignore the .vscode/ directory and its files
 .vscode/

@@ -4,7 +4,7 @@ import pandas as pd
 # Base Path CSV
 base_path = "CSV/"
 # Path Mapped files
-mapped_folder = os.path.join(base_path, "MAPPED/")
+mapped_folder = os.path.join(base_path, "STANDARD/MAPPED/")
 
 # Initializes a list to store information for each file
 file_info_list = []
@@ -59,10 +59,10 @@ file_info_list.insert(0, {
 # Create a DataFrame from the list information
 distribution_table = pd.DataFrame(file_info_list)
 
-# Create the 'DISTRIBUTION/' directory if it doesn't exist
-os.makedirs("DISTRIBUTION", exist_ok=True)
+# Create the 'DISTRIBUTION-TABLE/' directory if it doesn't exist
+os.makedirs("DISTRIBUTION-TABLE", exist_ok=True)
 # Save the distribution table to a new CSV file
-distribution_table.to_csv('DISTRIBUTION/distribution_table.csv', index=False)
+distribution_table.to_csv('DISTRIBUTION-TABLE/all_distribution_tables.csv', index=False)
 
 # View the distribution table
 print(distribution_table)
