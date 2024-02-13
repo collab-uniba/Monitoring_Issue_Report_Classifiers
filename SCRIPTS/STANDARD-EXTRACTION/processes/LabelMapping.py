@@ -10,8 +10,6 @@ logging.getLogger().setLevel(logging.INFO)
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(console_handler)
-# Create the 'logs/' directory if it doesn't exist
-os.makedirs("logs", exist_ok=True)
 
 # Set the field limit to a larger value
 csv.field_size_limit(min(2147483647, sys.maxsize))
@@ -81,9 +79,6 @@ for filename_input in input_files:
                 # Write the line to the output CSV file only if it has been mapped
                 if row_mapped:
                     csv_writer.writerow(row)
-                else:
-                    # Log a warning for unmapped row
-                    logging.warning(f'Skipping unmapped row in file {filename_input}: {row}')
 
     logging.info(f'The data in "{filename_input}" have been successfully exported to {output_csv_filename}')
 

@@ -9,8 +9,6 @@ logging.getLogger().setLevel(logging.INFO)
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(console_handler)
-# Create the 'logs/' directory if it doesn't exist
-os.makedirs("logs", exist_ok=True)
 
 # Set the field limit to a larger value
 csv.field_size_limit(min(2147483647, sys.maxsize))
@@ -20,18 +18,20 @@ csv_extension = ".csv"
 base_path = 'CSV/'
 # CSV Path
 csv_path = os.path.join(base_path,'ID-MAP/')
+# Export Path
+export_path = os.path.join(csv_path,'EXPORT/')
 # Output folder for clean files
 cleaned_folder = os.path.join(csv_path,'CLEANED/')
 # Create the 'cleaned_folder' directory if it doesn't exist
 os.makedirs(cleaned_folder, exist_ok=True)
 
 # Get list of files in base folder
-input_files = [f for f in os.listdir(csv_path) if f.endswith(csv_extension)]
+input_files = [f for f in os.listdir(export_path) if f.endswith(csv_extension)]
 
 # Iterate over each file in the folder
 for filename_input in input_files:
     # Build input and output file paths
-    input_csv_filename = os.path.join(csv_path, filename_input)
+    input_csv_filename = os.path.join(export_path, filename_input)
     output_csv_filename = os.path.join(cleaned_folder, filename_input)
 
     # Open the input CSV file
