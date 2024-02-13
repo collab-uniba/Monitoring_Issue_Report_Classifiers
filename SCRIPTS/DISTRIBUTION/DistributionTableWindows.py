@@ -8,6 +8,8 @@ mapped_folder = os.path.join(base_path, "STANDARD/MAPPED/")
 
 # Create the 'DISTRIBUTION-TABLE/' directory if it doesn't exist
 os.makedirs("DISTRIBUTION-TABLE", exist_ok=True)
+# Create the 'DISTRIBUTION-TABLE/WINDOWS' directory if it doesn't exist
+os.makedirs("DISTRIBUTION-TABLE/WINDOWS", exist_ok=True)
 
 # Iterate over each file in the folder
 for filename_input in os.listdir(mapped_folder):
@@ -45,7 +47,7 @@ for filename_input in os.listdir(mapped_folder):
     project_distribution_table = pd.DataFrame(distribution_data)
 
     # Save the project distribution table to a new CSV file in the 'DISTRIBUTION' folder
-    project_csv_filename = os.path.join("DISTRIBUTION", f'{os.path.splitext(filename_input)[0]}_distribution.csv')
+    project_csv_filename = os.path.join("DISTRIBUTION-TABLE/WINDOWS", f'{os.path.splitext(filename_input)[0]}.csv')
     project_distribution_table.to_csv(project_csv_filename, index=False)
 
 print("Script completed successfully.")

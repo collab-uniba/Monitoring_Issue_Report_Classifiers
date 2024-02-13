@@ -62,7 +62,7 @@ distribution_table = pd.DataFrame(file_info_list)
 # Create the 'DISTRIBUTION-TABLE/' directory if it doesn't exist
 os.makedirs("DISTRIBUTION-TABLE", exist_ok=True)
 # Save the distribution table to a new CSV file
-distribution_table.to_csv('DISTRIBUTION-TABLE/all_distribution_tables.csv', index=False)
+distribution_table.to_csv('DISTRIBUTION-TABLE/all_projects.csv', index=False)
 
 # View the distribution table
 print(distribution_table)
