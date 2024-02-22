@@ -1,57 +1,60 @@
-# JiraRepos Database Tools
+# Monitoring Issue Report Classifiers
 
-This set of tools facilitates the extraction and preprocessing of data from the JiraRepos MongoDB database. Follow the steps below to efficiently manage and analyze your Jira data.
+## Project Overview
 
-## Prerequisites
-- MongoDB Compass installed
-- Python 3.x installed
+This project facilitates the classification of issue reports into Bugs and Enhancements using the RoBERTa model, leveraging the Hugging Face transformers library. It includes scripts for data extraction from MongoDB, preparation of distribution tables with temporal windows, and a detailed Jupyter Notebook for training and evaluating the classification model.
 
-## Steps
+## Getting Started
 
-### 1. Extract Data from MongoDB Compass
+### Prerequisites
 
-1. Open MongoDB Compass.
-2. Run the `MongoExport.py` tool for each collection in the JiraRepos database. The tool automates the extraction process and uses the following query in the "Project" field:
+- MongoDB with access to the necessary databases.
+- Python 3.x and Jupyter Notebook or JupyterLab installed.
+- Required Python libraries: `pandas`, `numpy`, `matplotlib`, `torch`, `transformers`, `scikit-learn`, `accelerate`.
 
-    ```json
-    {
-        "_id": 0,
-        "fields.summary": 1,
-        "fields.description": 1,
-        "fields.issuetype.name": 1,
-        "fields.created": 1
-    }
-    ```
+### Installation
 
-### 2. Clean and Map Labels
+1. Clone the repository or download the ZIP and extract its contents.
+2. Ensure MongoDB is running and accessible.
+3. Install the Python dependencies listed above, preferably in a virtual environment:
+```
+   pip install -r requirements.txt
+```
 
-1. Run the `CleanCSV.py` tool to preprocess the CSV files.
-   
-    ```bash
-    python CleanCSV.py
-    ```
+### Execution Workflow
 
-2. Subsequently, execute the `LabelMapping.py` tool to apply label mappings based on predefined rules.
-   
-    ```bash
-    python LabelMapping.py
-    ```
+To correctly use this project and generate the desired outputs, follow the steps in the order provided:
 
-### 3. Generate Distribution Table
+1. **Standard Extraction**:
+    - Navigate to `SCRIPTS/STANDARD_EXTRACTION`.
+    - Run `StandardStarter.py` to begin the standard extraction process. This script extracts Jira Repos from MongoDB and prepares them for further analysis.
 
-1. Run the `DistributionTable.py` tool to generate the distribution table.
-   
-    ```bash
-    python DistributionTable.py
-    ```
+2. **Generate Distribution Tables with Temporal Windows**:
+    - Run `DistributionTableWindows.py` located in `SCRIPTS/DISTRIBUTION`. This script generates distribution tables considering different temporal windows, essential for the subsequent analysis.
 
-## Additional Information
+3. **Model Training and Evaluation**:
+    - Open and execute the `NOTEBOOKS/train-test.ipynb` Jupyter Notebook for training the RoBERTa model. This notebook includes steps for:
+        - Data loading and preparation.
+        - Model configuration and training.
+        - Evaluation of the model's performance in classifying issue reports.
 
-- The cleaned and labeled CSV files will be stored in the "CSV/CLEANED" and "CSV/MAPPED" folders, respectively.
-- The distribution table will be created and placed in the "DISTRIBUTION" folder.
-- Review the log files generated during the execution for detailed information on the process.
-  - Only logs with warning messages are stored to minimize clutter.
-  
-Now, you have organized, preprocessed, and generated a distribution table for your Jira data, making it ready for further analysis or integration into your workflow.
+## Key Components
 
-**Author:** Simone Le Noci
+- `SCRIPTS/`: Contains Python scripts for data extraction and preparation.
+- `NOTEBOOKS/`: Includes the `train-test.ipynb` Jupyter Notebook for model training and evaluation.
+- `CSV/`: Directory for CSV files used in model training, as referenced in the notebook.
+
+
+### Additional Scripts
+
+The project also includes various utility scripts for data cleaning, label mapping, and removing duplicated rows. These are located in `SCRIPTS/TOOLS` and `SCRIPTS/ID-MAP-EXTRACTION/processes`. These scripts support the main extraction and analysis processes and may be used as needed.
+
+## Outputs
+
+- Extracted and processed data ready for model training.
+- A trained RoBERTa model capable of classifying issue reports into bugs and enhancements.
+- Evaluation metrics and visualizations to evaluate model performance.
+
+#
+
+Author: Simone Le Noci
