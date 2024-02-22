@@ -4,6 +4,13 @@
 
 This project facilitates the classification of issue reports into Bugs and Enhancements using the RoBERTa model, leveraging the Hugging Face transformers library. It includes scripts for data extraction from MongoDB, preparation of distribution tables with temporal windows, and a detailed Jupyter Notebook for training and evaluating the classification model.
 
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/25181517/183423507-c056a6f9-1ba8-4312-a350-19bcbc5a8697.png" alt="Python Logo" width="50" height="50"/>
+  <img src="https://github.com/mongodb/mongo/raw/master/docs/leaf.svg" alt="MongoDB Logo" width="50" height="50"/>
+  <img src="https://pytorch.org/assets/images/pytorch-logo.png" alt="PyTorch Logo" width="50" height="50"/>
+  <img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="Hugging Face Transformers Logo" width="50" />
+</p>
+
 ## Getting Started
 
 ### Prerequisites
@@ -57,4 +64,7 @@ The project also includes various utility scripts for data cleaning, label mappi
 
 #
 
-Author: Simone Le Noci
+<p align="center">
+Author: Simone Le Noci <br><br>
+<a href="https://github.com/SimoneNuts"><img src="https://github.com/SimoneNuts.png?" width="100px"/></a>
+</p>
