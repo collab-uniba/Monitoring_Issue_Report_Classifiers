@@ -33,11 +33,11 @@ This project facilitates the classification of issue reports into Bugs and Enhan
 To correctly use this project and generate the desired outputs, follow the steps in the order provided:
 
 1. **Standard Extraction**:
-    - Navigate to `SCRIPTS/STANDARD_EXTRACTION`.
+    - Navigate to `DATA-PREPARATION/STANDARD_EXTRACTION`.
     - Run `StandardStarter.py` to begin the standard extraction process. This script extracts Jira Repos from MongoDB and prepares them for further analysis.
 
 2. **Generate Distribution Tables with Temporal Windows**:
-    - Run `DistributionTableWindows.py` located in `SCRIPTS/DISTRIBUTION`. This script generates distribution tables considering different temporal windows, essential for the subsequent analysis.
+    - Run `DistributionTableWindows.py` located in `DATA-PREPARATION/DISTRIBUTION`. This script generates distribution tables considering different temporal windows, essential for the subsequent analysis.
 
 3. **Model Training and Evaluation**:
     - Open and execute the `NOTEBOOKS/train-test.ipynb` Jupyter Notebook for training the RoBERTa model. This notebook includes steps for:
@@ -47,14 +47,14 @@ To correctly use this project and generate the desired outputs, follow the steps
 
 ## Key Components
 
-- `SCRIPTS/`: Contains Python scripts for data extraction and preparation.
+- `DATA-PREPARATION/`: Contains Python scripts for data extraction and preparation.
 - `NOTEBOOKS/`: Includes the `train-test.ipynb` Jupyter Notebook for model training and evaluation.
 - `CSV/`: Directory for CSV files used in model training, as referenced in the notebook.
 
 
 ### Additional Scripts
 
-The project also includes various utility scripts for data cleaning, label mapping, and removing duplicated rows. These are located in `SCRIPTS/TOOLS` and `SCRIPTS/ID-MAP-EXTRACTION/processes`. These scripts support the main extraction and analysis processes and may be used as needed.
+The project also includes various utility scripts for data cleaning, label mapping, and removing duplicated rows. These are located in `DATA-PREPARATION/TOOLS` and `DATA-PREPARATION/ID-MAP-EXTRACTION/processes`. These scripts support the main extraction and analysis processes and may be used as needed.
 
 ## Outputs
 
