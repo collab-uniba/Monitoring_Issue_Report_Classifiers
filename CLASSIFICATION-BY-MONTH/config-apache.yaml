@@ -1,0 +1,8 @@
+dataset_path: "../CSV/STANDARD/MAPPED/Apache.csv"
+start_year: 2005
+end_year: 2022
+start_month: 1
+end_month: 12
+start_year_train: 2000
+end_year_train: 2004
+undersampling_flag: True

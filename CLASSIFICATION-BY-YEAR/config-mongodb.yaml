@@ -1,0 +1,5 @@
+dataset_path: "../CSV/STANDARD/MAPPED/MongoDB.csv"
+start_year_train: 2009
+end_year_train: 2013
+last_year_test: 2022
+undersampling_flag: False
