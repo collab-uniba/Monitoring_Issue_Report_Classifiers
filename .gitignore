@@ -9,3 +9,6 @@ TOOLS/OUTPUTS/*
 
 # Ignore the .vscode/ directory and its files
 .vscode/
+
+# Ignore the results of the analysis
+*/RESULTS/*
