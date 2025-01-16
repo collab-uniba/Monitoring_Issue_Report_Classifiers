@@ -2,6 +2,7 @@ import csv
 import re
 from config import Config
 from utils import setup_logging, ensure_directories
+import logging
 
 class LabelMapper:
     def __init__(self):

@@ -1,6 +1,10 @@
 import csv
 from config import Config
 from utils import setup_logging, ensure_directories
+import sys
+import logging
+
+csv.field_size_limit(sys.maxsize)
 
 class CSVCleaner:
     def __init__(self):

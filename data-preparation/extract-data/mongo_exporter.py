@@ -2,6 +2,7 @@ import csv
 from pymongo import MongoClient
 from config import Config
 from utils import setup_logging, ensure_directories, remove_unprintable
+import logging
 
 class MongoExporter:
     def __init__(self):
