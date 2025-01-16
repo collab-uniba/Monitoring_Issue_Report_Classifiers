@@ -9,15 +9,15 @@ from typing import List, Optional
 class Pipeline:
     """Data processing pipeline that can run specified steps."""
     
-    def __init__(self, collections: Optional[List[str]] = None):
+    def __init__(self, cli_collections: Optional[List[str]] = None):
         """
-        Initialize pipeline with optional collection filter.
+        Initialize pipeline with optional CLI-specified collections.
         
         Args:
-            collections: Optional list of collection names to export. If None, exports all collections.
+            cli_collections: Optional list of collection names from CLI arguments
         """
         self.config = Config()
-        self.collections = collections
+        self.collections = Config.get_collections(cli_collections)
         self.steps = {
             'export': self._run_export,
             'clean': self._run_clean,
@@ -27,6 +27,10 @@ class Pipeline:
     def _run_export(self):
         """Run MongoDB export step."""
         print("Running MongoDB export...")
+        if self.collections:
+            print(f"Processing collections: {', '.join(self.collections)}")
+        else:
+            print("Processing all collections")
         MongoExporter(collections=self.collections).run()
         
     def _run_clean(self):
@@ -66,12 +70,12 @@ def main():
     parser.add_argument('--steps', nargs='+', default=['export', 'clean', 'map'],
                        help='Steps to run in order. Valid steps: export, clean, map')
     parser.add_argument('--collections', nargs='+',
-                       help='Optional list of collections to export. If not specified, exports all collections.')
+                       help='Optional list of collections to export. Overrides config.COLLECTIONS if specified.')
     
     args = parser.parse_args()
     
     try:
-        pipeline = Pipeline(collections=args.collections)
+        pipeline = Pipeline(cli_collections=args.collections)
         pipeline.run_steps(args.steps)
     except Exception as e:
         print(f"Error running pipeline: {e}")
