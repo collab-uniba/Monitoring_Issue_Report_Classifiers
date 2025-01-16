@@ -1,17 +1,17 @@
 # Ignore all CSV files in the CSV/ directory
-CSV/*
+data/*
 
 # Ignore all files in the DISTRIBUTION-TABLE/ directory
-DISTRIBUTION-TABLE/*
+distribution-table/*
 
-# Ignore all files in the TOOLS/OUTPUTS/ directory
-TOOLS/OUTPUTS/*
+# Ignore all files in the tools/outputs directory
+tools/outputs*
 
 # Ignore the .vscode/ directory and its files
 .vscode/
 
 # Ignore the results of the analysis
-*/RESULTS/*
+*/results/*
 
 # Ignore jira_dataset folder
 jira_dataset/
