@@ -9,3 +9,6 @@ jupyterlab
 imbalanced-learn
 sentence-transformers
 pymongo
+pytz
+python-dateutil
+six
