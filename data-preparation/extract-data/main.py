@@ -4,13 +4,20 @@ from csv_cleaner import CSVCleaner
 from label_mapper import LabelMapper
 from utils import ensure_directories
 import argparse
-from typing import List
+from typing import List, Optional
 
 class Pipeline:
     """Data processing pipeline that can run specified steps."""
     
-    def __init__(self):
+    def __init__(self, collections: Optional[List[str]] = None):
+        """
+        Initialize pipeline with optional collection filter.
+        
+        Args:
+            collections: Optional list of collection names to export. If None, exports all collections.
+        """
         self.config = Config()
+        self.collections = collections
         self.steps = {
             'export': self._run_export,
             'clean': self._run_clean,
@@ -20,7 +27,7 @@ class Pipeline:
     def _run_export(self):
         """Run MongoDB export step."""
         print("Running MongoDB export...")
-        MongoExporter().run()
+        MongoExporter(collections=self.collections).run()
         
     def _run_clean(self):
         """Run CSV cleaning step."""
@@ -58,11 +65,13 @@ def main():
     parser = argparse.ArgumentParser(description='Run specific steps of the data processing pipeline.')
     parser.add_argument('--steps', nargs='+', default=['export', 'clean', 'map'],
                        help='Steps to run in order. Valid steps: export, clean, map')
+    parser.add_argument('--collections', nargs='+',
+                       help='Optional list of collections to export. If not specified, exports all collections.')
     
     args = parser.parse_args()
     
     try:
-        pipeline = Pipeline()
+        pipeline = Pipeline(collections=args.collections)
         pipeline.run_steps(args.steps)
     except Exception as e:
         print(f"Error running pipeline: {e}")
