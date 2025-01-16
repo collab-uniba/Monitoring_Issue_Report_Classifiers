@@ -11,13 +11,11 @@ class Config:
     ]  # Default collections to process, None means process all
     
     # Base paths
-    BASE_PATH = Path('CSV')
+    BASE_PATH = Path('data')
     
-    # Folder structure
-    STANDARD_PATH = BASE_PATH / 'STANDARD'
-    EXPORT_PATH = STANDARD_PATH / 'EXPORT'
-    CLEANED_PATH = STANDARD_PATH / 'CLEANED'
-    MAPPED_PATH = STANDARD_PATH / 'MAPPED'
+    EXPORT_PATH = BASE_PATH / 'export'
+    CLEANED_PATH = BASE_PATH / 'cleaned'
+    MAPPED_PATH = BASE_PATH / 'mapped'
     
     # MongoDB configuration
     MONGO_CONFIG = {
