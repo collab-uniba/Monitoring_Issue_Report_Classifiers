@@ -36,7 +36,7 @@ class Pipeline:
     def _run_clean(self):
         """Run CSV cleaning step."""
         print("Running CSV cleaning...")
-        CSVCleaner().run()
+        CSVCleaner(collections=self.collections).run()
         
     def _run_map(self):
         """Run label mapping step."""
