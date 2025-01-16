@@ -4,12 +4,13 @@ from pathlib import Path
 
 def setup_logging():
     """Configure logging settings."""
-    logging.getLogger().setLevel(logging.INFO)
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(formatter)
-    logging.getLogger().addHandler(console_handler)
+    if not logging.getLogger().handlers:
+        logging.getLogger().setLevel(logging.INFO)
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        console_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(console_handler)
 
 def ensure_directories(paths):
     """Create directories if they don't exist."""
