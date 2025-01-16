@@ -41,25 +41,13 @@ fi
 # Download the ZIP file
 JIRA_ZIP_URL="https://zenodo.org/records/7182101/files/ThePublicJiraDataset.zip?download=1"
 JIRA_ZIP_FILE="ThePublicJiraDataset.zip"
-wget -O "$JIRA_ZIP_FILE" "$JIRA_ZIP_URL"
+sudo wget -O "$JIRA_ZIP_FILE" "$JIRA_ZIP_URL"
 
 # Extract the ZIP file
-unzip -o "$JIRA_ZIP_FILE" -d jira_dataset
-
-# Change to the dataset directory (if needed)
-cd jira_dataset
-
-# Run mongodump
-echo "Creating MongoDB dump..."
-mongodump --db=JiraRepos --gzip --archive=mongodump-JiraRepos.archive
+sudo unzip -o "$JIRA_ZIP_FILE" -d jira_dataset
 
 # Run mongorestore
 echo "Restoring MongoDB dump..."
-mongorestore --gzip --archive=mongodump-JiraRepos.archive --nsFrom "JiraRepos.*" --nsTo "JiraRepos.*"
+mongorestore --gzip --archive="jira_dataset/ThePublicJiraDataset/3. DataDump/mongodump-JiraRepos.archive" --nsFrom "JiraRepos.*" --nsTo "JiraRepos.*"
 
-# Cleanup (optional)
-echo "Cleaning up..."
-cd ..
-rm -rf jira_dataset "$JIRA_ZIP_FILE"
-
-echo "Script completed successfully."
+echo "Done!"
