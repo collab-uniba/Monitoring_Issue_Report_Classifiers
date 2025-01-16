@@ -41,7 +41,7 @@ class Pipeline:
     def _run_map(self):
         """Run label mapping step."""
         print("Running label mapping...")
-        LabelMapper().run()
+        LabelMapper(collections=self.collections).run()
         
     def run_steps(self, selected_steps: List[str]):
         """Run specified pipeline steps in order."""
