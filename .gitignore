@@ -12,3 +12,9 @@ TOOLS/OUTPUTS/*
 
 # Ignore the results of the analysis
 */RESULTS/*
+
+# Ignore jira_dataset folder
+jira_dataset/
+
+# Ignore any folder that starts with __pycache__
+__pycache__/

@@ -8,3 +8,4 @@ accelerate
 jupyterlab
 imbalanced-learn
 sentence-transformers
+pymongo
