@@ -48,7 +48,6 @@ class Pipeline:
         # Ensure all required directories exist
         ensure_directories([
             self.config.BASE_PATH,
-            self.config.STANDARD_PATH,
             self.config.EXPORT_PATH,
             self.config.CLEANED_PATH,
             self.config.MAPPED_PATH
