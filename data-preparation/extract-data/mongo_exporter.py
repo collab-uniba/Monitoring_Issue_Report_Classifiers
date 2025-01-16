@@ -67,17 +67,26 @@ class MongoExporter:
             writer = csv.DictWriter(
                 csvfile,
                 fieldnames=list(self.config.CSV_FIELD_MAPPINGS['input_fields'].values()),
-                quoting=csv.QUOTE_MINIMAL
+                quoting=csv.QUOTE_MINIMAL,
+                delimiter=',',
+                quotechar='"'
             )
             writer.writeheader()
             
+            def get_nested_field(data, field_name):
+                """Recursive function to get a field from a nested dictionary."""
+                keys = field_name.split('.')
+                for key in keys:
+                    data = data.get(key, '')
+                return data
+            
             for doc in cursor:
                 cleaned_doc = {
-                    field: remove_unprintable(doc.get('fields', {}).get(field.split('.')[-1], ''))
+                    field: remove_unprintable(get_nested_field(doc, field))
                     for field in self.config.CSV_FIELD_MAPPINGS['input_fields'].values()
                 }
                 writer.writerow(cleaned_doc)
-                
+
         logging.info(f"Exported collection: {collection.name}")
     
     def run(self):
