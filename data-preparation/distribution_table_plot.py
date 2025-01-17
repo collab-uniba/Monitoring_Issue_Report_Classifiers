@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import Optional
 from config import Config
 import logging
+from utils import setup_logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+setup_logging()
 
-TABLES_PATH = Path("distribution-table/tables")
+TABLES_PATH = Path("data/tables")
 WINDOWS_TABLES_PATH = TABLES_PATH / "windows"
 
 def parse_timestamp(timestamp_str: str) -> pd.Timestamp:
@@ -27,10 +27,10 @@ def ensure_time_windows(split_type: str, range_size: int, allow_window_creation:
         return True
         
     if not allow_window_creation:
-        logger.error(f"Time windows not found at {window_path} and creation not allowed")
+        logging.error(f"Time windows not found at {window_path} and creation not allowed")
         return False
         
-    logger.info("Time windows not found. Creating them...")
+    logging.info("Time windows not found. Creating them...")
     try:
         subprocess.run([
             "python", 
@@ -40,7 +40,7 @@ def ensure_time_windows(split_type: str, range_size: int, allow_window_creation:
         ], check=True)
         return True
     except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to create time windows: {e}")
+        logging.error(f"Failed to create time windows: {e}")
         return False
 
 def generate_overall_distribution(mapped_folder: Path):
@@ -57,7 +57,7 @@ def generate_overall_distribution(mapped_folder: Path):
         try:
             df['date'] = df['date'].apply(parse_timestamp)
         except Exception as e:
-            logger.error(f"Error parsing dates in {file_path}: {e}")
+            logging.error(f"Error parsing dates in {file_path}: {e}")
             continue
 
         min_year = df['date'].dt.year.min(skipna=True)
@@ -95,11 +95,13 @@ def generate_overall_distribution(mapped_folder: Path):
     distribution_table.to_csv(TABLES_PATH / 'overall.csv', index=False)
     print(distribution_table)
 
-def generate_windows_distribution(windows_path: Path):
+def generate_windows_distribution(windows_path: Path, split_type: str, range_size: int):
     """
     Generate distribution tables for each project across their time windows.
     """
-    WINDOWS_TABLES_PATH.mkdir(parents=True, exist_ok=True)
+    # Create the output directory based on split_type and range_size
+    output_dir = WINDOWS_TABLES_PATH / f"{split_type}_range_{range_size}"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Process each project directory
     for project_dir in windows_path.iterdir():
@@ -107,7 +109,7 @@ def generate_windows_distribution(windows_path: Path):
             continue
             
         project_name = project_dir.name
-        logger.info(f"Processing windows distribution for project: {project_name}")
+        logging.info(f"Processing windows distribution for project: {project_name}")
         
         # Dictionary to store distributions for each time window
         window_distributions = []
@@ -155,9 +157,9 @@ def generate_windows_distribution(windows_path: Path):
             project_df = pd.concat([total_row, project_df], ignore_index=True)
             
             # Save project distribution
-            output_file = WINDOWS_TABLES_PATH / f'{project_name}.csv'
+            output_file = output_dir / f'{project_name}.csv'
             project_df.to_csv(output_file, index=False)
-            logger.info(f"Created distribution file: {output_file}")
+            logging.info(f"Created distribution file: {output_file}")
 
 def main():
     parser = argparse.ArgumentParser(description='Generate distribution tables based on the provided mode.')
@@ -181,7 +183,7 @@ def main():
             return
             
         windows_path = Config.WINDOWS_PATH / f"{args.split_type}_range_{args.range}"
-        generate_windows_distribution(windows_path)
+        generate_windows_distribution(windows_path, args.split_type, args.range)
     else:  # overall
         generate_overall_distribution(Config.MAPPED_PATH)
 
