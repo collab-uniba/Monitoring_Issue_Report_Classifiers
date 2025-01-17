@@ -9,15 +9,17 @@ from pathlib import Path
 csv.field_size_limit(sys.maxsize)
 
 class CSVCleaner:
-    def __init__(self, collections: Optional[List[str]] = None):
+    def __init__(self, collections: Optional[List[str]] = None, remove_duplicates: bool = True):
         """
-        Initialize CSVCleaner with optional collection filter.
+        Initialize CSVCleaner with optional collection filter and duplicate removal option.
         
         Args:
             collections: Optional list of collection names to clean. If None, cleans all collections.
+            remove_duplicates: If True, duplicate rows will be removed. Defaults to True.
         """
         self.config = Config()
         self.collections = collections
+        self.remove_duplicates = remove_duplicates
         setup_logging()
         ensure_directories([self.config.CLEANED_PATH])
         
@@ -60,6 +62,10 @@ class CSVCleaner:
             writer = csv.DictWriter(outfile, fieldnames=self.config.CSV_FIELD_MAPPINGS['output_fields'])
             
             writer.writeheader()
+            
+            # Set to keep track of seen rows if remove_duplicates is True
+            seen_rows = set()
+            
             for row in reader:
                 cleaned_row = {
                     'title': row[self.config.CSV_FIELD_MAPPINGS['input_fields']['summary']],
@@ -67,7 +73,16 @@ class CSVCleaner:
                     'label': row[self.config.CSV_FIELD_MAPPINGS['input_fields']['issue_type']],
                     'date': row[self.config.CSV_FIELD_MAPPINGS['input_fields']['created_date']]
                 }
-                writer.writerow(cleaned_row)
+                
+                # Create a tuple of the cleaned row values to check for duplicates
+                row_tuple = tuple(cleaned_row.values())
+                
+                if self.remove_duplicates:
+                    if row_tuple not in seen_rows:
+                        seen_rows.add(row_tuple)
+                        writer.writerow(cleaned_row)
+                else:
+                    writer.writerow(cleaned_row)
     
     def run(self):
         """Clean selected CSV files in the export directory."""
