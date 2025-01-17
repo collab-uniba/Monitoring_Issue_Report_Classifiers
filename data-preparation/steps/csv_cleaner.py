@@ -5,21 +5,24 @@ import sys
 import logging
 from typing import Optional, List
 from pathlib import Path
+from datetime import datetime
 
 csv.field_size_limit(sys.maxsize)
 
 class CSVCleaner:
-    def __init__(self, collections: Optional[List[str]] = None, remove_duplicates: bool = True):
+    def __init__(self, collections: Optional[List[str]] = None, remove_duplicates: bool = True, remove_invalid_dates: bool = True):
         """
-        Initialize CSVCleaner with optional collection filter and duplicate removal option.
+        Initialize CSVCleaner with optional collection filter, duplicate removal option, and invalid date removal option.
         
         Args:
             collections: Optional list of collection names to clean. If None, cleans all collections.
             remove_duplicates: If True, duplicate rows will be removed. Defaults to True.
+            remove_invalid_dates: If True, rows with dates before 1900 will be removed. Defaults to True.
         """
         self.config = Config()
         self.collections = collections
         self.remove_duplicates = remove_duplicates
+        self.remove_invalid_dates = remove_invalid_dates
         setup_logging()
         ensure_directories([self.config.CLEANED_PATH])
         
@@ -45,6 +48,23 @@ class CSVCleaner:
                 logging.warning(f"Collection file not found: {file_path}")
                 
         return collection_files
+        
+    def is_valid_date(self, date_str: str) -> bool:
+        """
+        Check if a date string is valid (i.e., not before 1900).
+        
+        Args:
+            date_str: The date string to check (in ISO 8601 format with timezone offset).
+            
+        Returns:
+            True if the date is valid, False otherwise.
+        """
+        try:
+            # Parse the date string in ISO 8601 format with timezone offset
+            date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            return date.year >= 1900
+        except ValueError:
+            return False
         
     def clean_file(self, input_file: Path):
         """
@@ -73,6 +93,10 @@ class CSVCleaner:
                     'label': row[self.config.CSV_FIELD_MAPPINGS['input_fields']['issue_type']],
                     'date': row[self.config.CSV_FIELD_MAPPINGS['input_fields']['created_date']]
                 }
+                
+                # Check if the date is valid if remove_invalid_dates is True
+                if self.remove_invalid_dates and not self.is_valid_date(cleaned_row['date']):
+                    continue
                 
                 # Create a tuple of the cleaned row values to check for duplicates
                 row_tuple = tuple(cleaned_row.values())
