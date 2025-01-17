@@ -16,6 +16,7 @@ class Config:
     EXPORT_PATH = BASE_PATH / 'export'
     CLEANED_PATH = BASE_PATH / 'cleaned'
     MAPPED_PATH = BASE_PATH / 'mapped'
+    WINDOWS_PATH = BASE_PATH / 'windows'
     
     # MongoDB configuration
     MONGO_CONFIG = {

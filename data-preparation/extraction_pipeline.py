@@ -1,7 +1,7 @@
 from config import Config
-from mongo_exporter import MongoExporter
-from csv_cleaner import CSVCleaner
-from label_mapper import LabelMapper
+from steps.mongo_exporter import MongoExporter
+from steps.csv_cleaner import CSVCleaner
+from steps.label_mapper import LabelMapper
 from utils import ensure_directories
 import argparse
 from typing import List, Optional
