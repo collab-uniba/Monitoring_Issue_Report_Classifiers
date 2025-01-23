@@ -3,11 +3,16 @@ import argparse
 import yaml
 import pandas as pd
 import torch
+import logging
 from sklearn.model_selection import train_test_split
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments
 from torch.utils.data import Dataset
 from sklearn.metrics import classification_report
 from pathlib import Path
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 # Define the CustomDataset class
 class CustomDataset(Dataset):
@@ -74,7 +79,7 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         pd.DataFrame: Combined data filtered by the specified range and labels.
     """
     def overlaps_year(file_start, file_end):
-        return file_end >= start_year and file_start <= end_year
+        return not (file_end < start_year or file_start > end_year)
 
     def overlaps_month(file_start, file_end):
         return not (
@@ -94,14 +99,14 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         if split_type == "year":
             return int(file.split('-')[0]), int(file.split('-')[1].split('.')[0])
         elif split_type == "month":
-            start_year, start_month = map(int, file.split('-')[:2])
-            end_year, end_month = map(int, file.split('_')[1].split('-')[:2])
+            start_year, start_month = map(int, file.split('-')[0:2])
+            end_year, end_month = map(int, file.split('_')[1].split('-')[0:2])
             return (start_year, start_month), (end_year, end_month)
         elif split_type == "day":
             start_parts = list(map(int, file.split('-')[0:3]))
             end_parts = list(map(int, file.split('_')[1].split('-')))
             return tuple(start_parts), tuple(end_parts)
-
+        
     # Define data directory
     data_dir = Path(f"data/windows/{split_type}_range_{range_val}/{project_name}")
     if not data_dir.exists():
@@ -109,6 +114,7 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
 
     # Initialize dataframe
     df_all = pd.DataFrame()
+    file_names = []
 
     # Process each file
     for file in data_dir.glob("*.csv"):
@@ -121,15 +127,23 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
                (split_type == "day" and (file_start[0] > end_year or (file_start[0] == end_year and (file_start[1] > end_month or (file_start[1] == end_month and file_start[2] > end_day))))):
                 df = pd.read_csv(file)
                 df_all = pd.concat([df_all, df], ignore_index=True)
+                file_names.append(file_name)
         else:
             if (split_type == "year" and overlaps_year(file_start, file_end)) or \
                (split_type == "month" and overlaps_month(file_start, file_end)) or \
                (split_type == "day" and overlaps_day(file_start, file_end)):
                 df = pd.read_csv(file)
                 df_all = pd.concat([df_all, df], ignore_index=True)
+                file_names.append(file_name)
 
     if df_all.empty:
         raise ValueError(f"No data found for the specified range in {data_dir}")
+
+    # Log the file names
+    if test:
+        logger.info(f"Files used for testing: {file_names}")
+    else:
+        logger.info(f"Files used for training: {file_names}")
 
     # Data preprocessing
     df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce', format='%Y-%m-%dT%H:%M:%S.%f+0000')
@@ -179,7 +193,7 @@ def train_model(df_train_val, results_path, model_save_path, config, use_validat
     trainer.train()
     model.save_pretrained(model_save_path)
     tokenizer.save_pretrained(model_save_path)
-    print(f"Model saved to {model_save_path}")
+    logger.info(f"Model saved to {model_save_path}")
 
 
 def evaluate_model(model, tokenizer, test_df, results_path):
@@ -211,7 +225,7 @@ def evaluate_model(model, tokenizer, test_df, results_path):
     test_df['predictions'] = preds
     test_df.to_csv(results_path / "predictions.csv", index=False)
 
-    print(f"Reports and predictions saved to {results_path}")
+    logger.info(f"Reports and predictions saved to {results_path}")
 
 
 # Main function
