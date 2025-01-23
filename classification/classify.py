@@ -11,16 +11,16 @@ from pathlib import Path
 
 # Define the CustomDataset class
 class CustomDataset(Dataset):
-    def init(self, texts, labels, tokenizer, max_token_len=512):
+    def __init__(self, texts, labels, tokenizer, max_token_len=512):
         self.tokenizer = tokenizer
         self.texts = texts
         self.labels = labels
         self.max_token_len = max_token_len
 
-    def len(self):
+    def __len__(self):
         return len(self.texts)
 
-    def getitem(self, idx):
+    def __getitem__(self, idx):
         text = str(self.texts[idx])
         if pd.isna(text):
             text = ""
