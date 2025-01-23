@@ -99,14 +99,14 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         if split_type == "year":
             return int(file.split('-')[0]), int(file.split('-')[1].split('.')[0])
         elif split_type == "month":
-            start_year, start_month = map(int, file.split('-')[0:2])
-            end_year, end_month = map(int, file.split('_')[1].split('-')[0:2])
+            start_year, start_month = map(int, file.split('-')[:2])
+            end_year, end_month = map(int, file.split('_')[1].split('-')[:2])
             return (start_year, start_month), (end_year, end_month)
         elif split_type == "day":
-            start_parts = list(map(int, file.split('-')[0:3]))
+            start_parts = list(map(int, file.split('-')[:3]))
             end_parts = list(map(int, file.split('_')[1].split('-')))
             return tuple(start_parts), tuple(end_parts)
-        
+
     # Define data directory
     data_dir = Path(f"data/windows/{split_type}_range_{range_val}/{project_name}")
     if not data_dir.exists():
@@ -126,6 +126,7 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
                (split_type == "month" and (file_start[0] > end_year or (file_start[0] == end_year and file_start[1] > end_month))) or \
                (split_type == "day" and (file_start[0] > end_year or (file_start[0] == end_year and (file_start[1] > end_month or (file_start[1] == end_month and file_start[2] > end_day))))):
                 df = pd.read_csv(file)
+                df['file_name'] = file_name  # Add file_name column
                 df_all = pd.concat([df_all, df], ignore_index=True)
                 file_names.append(file_name)
         else:
@@ -133,6 +134,7 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
                (split_type == "month" and overlaps_month(file_start, file_end)) or \
                (split_type == "day" and overlaps_day(file_start, file_end)):
                 df = pd.read_csv(file)
+                df['file_name'] = file_name  # Add file_name column
                 df_all = pd.concat([df_all, df], ignore_index=True)
                 file_names.append(file_name)
 
@@ -204,13 +206,16 @@ def evaluate_model(model, tokenizer, test_df, results_path):
     preds = predictions.predictions.argmax(-1)
     labels = test_df['labels'].to_numpy()
 
-    # Generate classification report for each file
+    # Generate classification report for each file (if file_name column exists)
     file_reports = {}
-    for file in test_df['file_name'].unique():
-        file_df = test_df[test_df['file_name'] == file]
-        file_labels = file_df['labels'].to_numpy()
-        file_preds = preds[test_df['file_name'] == file]
-        file_reports[file] = classification_report(file_labels, file_preds, output_dict=True)
+    if 'file_name' in test_df.columns:
+        for file in test_df['file_name'].unique():
+            file_df = test_df[test_df['file_name'] == file]
+            file_labels = file_df['labels'].to_numpy()
+            file_preds = preds[test_df['file_name'] == file]
+            file_reports[file] = classification_report(file_labels, file_preds, output_dict=True)
+    else:
+        logger.warning("'file_name' column not found in test data. Skipping per-file classification reports.")
 
     # Generate aggregated classification report
     aggregated_report = classification_report(labels, preds, output_dict=True)
