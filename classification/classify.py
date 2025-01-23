@@ -57,7 +57,7 @@ def generate_results_path(root_path, split_type, range_val, project_name, start_
     return path
 
 
-def load_data(split_type, range_val, project_name, start_year, end_year, start_month=None, end_month=None, start_day=None, end_day=None, label_set=None):
+def load_data(split_type, range_val, project_name, start_year, end_year, start_month=None, end_month=None, start_day=None, end_day=None, label_set=None, test=False):
     """
     Load data based on split type and range.
 
@@ -68,12 +68,13 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         start_year, end_year (int): Start and end years for filtering.
         start_month, end_month, start_day, end_day (int, optional): Additional filters for months and days.
         label_set (set, optional): Labels to include in the dataset.
+        test (bool): If True, load data after the end date for testing.
 
     Returns:
         pd.DataFrame: Combined data filtered by the specified range and labels.
     """
     def overlaps_year(file_start, file_end):
-        return not (file_end < start_year or file_start > end_year)
+        return file_end >= start_year and file_start <= end_year
 
     def overlaps_month(file_start, file_end):
         return not (
@@ -93,15 +94,15 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         if split_type == "year":
             return int(file.split('-')[0]), int(file.split('-')[1].split('.')[0])
         elif split_type == "month":
-            start_year, start_month = map(int, file.split('-')[0:2])
-            end_year, end_month = map(int, file.split('_')[1].split('-')[0:2])
+            start_year, start_month = map(int, file.split('-')[:2])
+            end_year, end_month = map(int, file.split('_')[1].split('-')[:2])
             return (start_year, start_month), (end_year, end_month)
         elif split_type == "day":
             start_parts = list(map(int, file.split('-')[0:3]))
             end_parts = list(map(int, file.split('_')[1].split('-')))
             return tuple(start_parts), tuple(end_parts)
-        
-# Define data directory
+
+    # Define data directory
     data_dir = Path(f"data/windows/{split_type}_range_{range_val}/{project_name}")
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
@@ -114,11 +115,18 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         file_name = file.name
         file_start, file_end = parse_filename(file_name, split_type)
 
-        if (split_type == "year" and overlaps_year(file_start, file_end)) or \
-           (split_type == "month" and overlaps_month(file_start, file_end)) or \
-           (split_type == "day" and overlaps_day(file_start, file_end)):
-            df = pd.read_csv(file)
-            df_all = pd.concat([df_all, df], ignore_index=True)
+        if test:
+            if (split_type == "year" and file_start > end_year) or \
+               (split_type == "month" and (file_start[0] > end_year or (file_start[0] == end_year and file_start[1] > end_month))) or \
+               (split_type == "day" and (file_start[0] > end_year or (file_start[0] == end_year and (file_start[1] > end_month or (file_start[1] == end_month and file_start[2] > end_day))))):
+                df = pd.read_csv(file)
+                df_all = pd.concat([df_all, df], ignore_index=True)
+        else:
+            if (split_type == "year" and overlaps_year(file_start, file_end)) or \
+               (split_type == "month" and overlaps_month(file_start, file_end)) or \
+               (split_type == "day" and overlaps_day(file_start, file_end)):
+                df = pd.read_csv(file)
+                df_all = pd.concat([df_all, df], ignore_index=True)
 
     if df_all.empty:
         raise ValueError(f"No data found for the specified range in {data_dir}")
@@ -153,10 +161,10 @@ def train_model(df_train_val, results_path, model_save_path, config, use_validat
         warmup_steps=config['training_args']['warmup_steps'],
         weight_decay=config['training_args']['weight_decay'],
         logging_dir=config['training_args']['logging_dir'],
-        evaluation_strategy="epoch" if use_validation else "no",
+        eval_strategy="epoch" if use_validation else "no",
         save_strategy="epoch",
-        learning_rate=config['training_args']['learning_rate'],
-        adam_epsilon=config['training_args']['adam_epsilon'],
+        learning_rate=float(config['training_args']['learning_rate']),
+        adam_epsilon=float(config['training_args']['adam_epsilon']),
         eval_steps=config['training_args']['eval_steps'],
     )
 
@@ -172,6 +180,39 @@ def train_model(df_train_val, results_path, model_save_path, config, use_validat
     model.save_pretrained(model_save_path)
     tokenizer.save_pretrained(model_save_path)
     print(f"Model saved to {model_save_path}")
+
+
+def evaluate_model(model, tokenizer, test_df, results_path):
+    test_dataset = CustomDataset(test_df['text'].to_numpy(), test_df['labels'].to_numpy(), tokenizer)
+    trainer = Trainer(model=model)
+
+    predictions = trainer.predict(test_dataset)
+    preds = predictions.predictions.argmax(-1)
+    labels = test_df['labels'].to_numpy()
+
+    # Generate classification report for each file
+    file_reports = {}
+    for file in test_df['file_name'].unique():
+        file_df = test_df[test_df['file_name'] == file]
+        file_labels = file_df['labels'].to_numpy()
+        file_preds = preds[test_df['file_name'] == file]
+        file_reports[file] = classification_report(file_labels, file_preds, output_dict=True)
+
+    # Generate aggregated classification report
+    aggregated_report = classification_report(labels, preds, output_dict=True)
+
+    # Save reports and predictions
+    with open(results_path / "file_reports.yaml", 'w') as f:
+        yaml.dump(file_reports, f)
+
+    with open(results_path / "aggregated_report.yaml", 'w') as f:
+        yaml.dump(aggregated_report, f)
+
+    test_df['predictions'] = preds
+    test_df.to_csv(results_path / "predictions.csv", index=False)
+
+    print(f"Reports and predictions saved to {results_path}")
+
 
 # Main function
 def main(config_file):
@@ -196,8 +237,7 @@ def main(config_file):
     # Load the label set from config or default to an empty set
     label_set = set(config.get('labels', []))
 
-
-# Load the training and validation data
+    # Load the training and validation data
     df_train_val = load_data(
         config['split_type'], config['range'], config['project_name'],
         config['start_year'], config['end_year'],
@@ -215,6 +255,21 @@ def main(config_file):
         use_validation=config.get('use_validation', True),
         split_size=config.get('split_size', 0.3)
     )
+
+    # Load the test data
+    df_test = load_data(
+        config['split_type'], config['range'], config['project_name'],
+        config['start_year'], config['end_year'],
+        config.get('start_month'), config.get('end_month'),
+        config.get('start_day'), config.get('end_day'),
+        label_set=label_set,
+        test=True
+    )
+
+    # Evaluate the model on the test set
+    model = AutoModelForSequenceClassification.from_pretrained(model_save_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_save_path)
+    evaluate_model(model, tokenizer, df_test, results_path)
 
 
 if __name__ == "__main__":
