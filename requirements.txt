@@ -12,3 +12,4 @@ pymongo
 pytz
 python-dateutil
 six
+pyYAML
