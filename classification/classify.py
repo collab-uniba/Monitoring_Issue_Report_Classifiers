@@ -256,24 +256,28 @@ def main(config_file):
     # Load the label set from config or default to an empty set
     label_set = set(config.get('labels', []))
 
-    # Load the training and validation data
-    df_train_val = load_data(
-        config['split_type'], config['range'], config['project_name'],
-        config['start_year'], config['end_year'],
-        config.get('start_month'), config.get('end_month'),
-        config.get('start_day'), config.get('end_day'),
-        label_set=label_set
-    )
+    if presaved_model_path := config.get('presaved_model_path'):
+        logger.info(f"Using pre-saved model from {presaved_model_path}. Skipping training.")
+        model_save_path = Path(presaved_model_path)
+    else:
+        # Load the training and validation data
+        df_train_val = load_data(
+            config['split_type'], config['range'], config['project_name'],
+            config['start_year'], config['end_year'],
+            config.get('start_month'), config.get('end_month'),
+            config.get('start_day'), config.get('end_day'),
+            label_set=label_set
+        )
 
-    # Train the model with optional validation and custom split size
-    train_model(
-        df_train_val,
-        results_path,
-        model_save_path,
-        config,
-        use_validation=config.get('use_validation', True),
-        split_size=config.get('split_size', 0.3)
-    )
+        # Train the model with optional validation and custom split size
+        train_model(
+            df_train_val,
+            results_path,
+            model_save_path,
+            config,
+            use_validation=config.get('use_validation', True),
+            split_size=config.get('split_size', 0.3)
+        )
 
     # Load the test data
     df_test = load_data(
