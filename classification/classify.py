@@ -96,7 +96,6 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         )
 
     def parse_filename(file, split_type):
-        print(file)
         if split_type == "year":
             start_year, end_year = map(int, file.replace('.csv', '').split('-'))
             return start_year, end_year
