@@ -178,7 +178,7 @@ def train_model(df_train_val, results_path, model_save_path, config, use_validat
         weight_decay=config['training_args']['weight_decay'],
         logging_dir=config['training_args']['logging_dir'],
         eval_strategy="epoch" if use_validation else "no",
-        save_strategy="epoch",
+        save_strategy="no",
         learning_rate=float(config['training_args']['learning_rate']),
         adam_epsilon=float(config['training_args']['adam_epsilon']),
         eval_steps=config['training_args']['eval_steps'],
