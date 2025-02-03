@@ -96,16 +96,25 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         )
 
     def parse_filename(file, split_type):
+        print(file)
         if split_type == "year":
-            return int(file.split('-')[0]), int(file.split('-')[1].split('.')[0])
+            start_year, end_year = map(int, file.replace('.csv', '').split('-'))
+            return start_year, end_year
+        
         elif split_type == "month":
-            start_year, start_month = map(int, file.split('-')[:2])
-            end_year, end_month = map(int, file.split('_')[1].split('-')[:2])
+            start_part, end_part = file.replace('.csv', '').split('_')
+            start_year, start_month = map(int, start_part.split('-'))
+            end_year, end_month = map(int, end_part.split('-'))
             return (start_year, start_month), (end_year, end_month)
+        
         elif split_type == "day":
-            start_parts = list(map(int, file.split('-')[:3]))
-            end_parts = list(map(int, file.split('_')[1].split('-')))
-            return tuple(start_parts), tuple(end_parts)
+            start_part, end_part = file.replace('.csv', '').split('_')
+            start_year, start_month, start_day = map(int, start_part.split('-'))
+            end_year, end_month, end_day = map(int, end_part.split('-'))
+            return (start_year, start_month, start_day), (end_year, end_month, end_day)
+        
+        else:
+            raise ValueError("Invalid split_type. Must be 'year', 'month', or 'day'")
 
     # Define data directory
     data_dir = Path(f"data/windows/{split_type}_range_{range_val}/{project_name}")
