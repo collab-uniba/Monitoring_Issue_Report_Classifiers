@@ -294,7 +294,7 @@ def main(config_file):
         config['start_year'], config['end_year'],
         config.get('start_month'), config.get('end_month'),
         config.get('start_day'), config.get('end_day'),
-        label_set=label_set,
+        label_set=label_list,
         test=True
     )
 
