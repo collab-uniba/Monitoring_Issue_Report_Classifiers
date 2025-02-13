@@ -262,7 +262,8 @@ def main(config_file):
     os.makedirs(model_save_path, exist_ok=True)
 
     # Load the label set from config or default to an empty set
-    label_set = set(config.get('labels', []))
+    label_list = sorted(config.get('label_set', []))
+   
 
     if presaved_model_path := config.get('presaved_model_path'):
         logger.info(f"Using pre-saved model from {presaved_model_path}. Skipping training.")
@@ -274,7 +275,7 @@ def main(config_file):
             config['start_year'], config['end_year'],
             config.get('start_month'), config.get('end_month'),
             config.get('start_day'), config.get('end_day'),
-            label_set=label_set
+            label_set=label_list
         )
 
         # Train the model with optional validation and custom split size
