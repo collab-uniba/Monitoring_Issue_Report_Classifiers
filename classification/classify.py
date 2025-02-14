@@ -14,7 +14,24 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Define the CustomDataset class
+class LabelMapper:
+    """
+    Maintains consistent label mapping across training and testing.
+    """
+    def __init__(self, label_set=None):
+        self.label_to_id = {label: i for i, label in enumerate(sorted(label_set))} if label_set else {}
+        self.id_to_label = {i: label for label, i in self.label_to_id.items()} if label_set else {}
+    
+    def map_labels(self, labels):
+        return labels.map(self.label_to_id)
+    
+    def inverse_map(self, ids):
+        return [self.id_to_label[id] for id in ids]
+    
+    @property
+    def num_labels(self):
+        return len(self.label_to_id)
+
 class CustomDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_token_len=512):
         self.tokenizer = tokenizer
@@ -48,8 +65,8 @@ class CustomDataset(Dataset):
             'labels': torch.tensor(labels, dtype=torch.long)
         }
 
-
-def generate_results_path(root_path, split_type, range_val, project_name, start_year, end_year, start_month=None, end_month=None, start_day=None, end_day=None):
+def generate_results_path(root_path, split_type, range_val, project_name, start_year, end_year, 
+                         start_month=None, end_month=None, start_day=None, end_day=None):
     path = Path(root_path) / f"{split_type}_range_{range_val}"
     if split_type == "year":
         path /= f"{start_year}-{end_year}"
@@ -61,22 +78,10 @@ def generate_results_path(root_path, split_type, range_val, project_name, start_
     path /= project_name
     return path
 
-
-def load_data(split_type, range_val, project_name, start_year, end_year, start_month=None, end_month=None, start_day=None, end_day=None, label_set=None, test=False):
+def load_data(split_type, range_val, project_name, start_year, end_year, label_mapper, 
+              start_month=None, end_month=None, start_day=None, end_day=None, test=False):
     """
-    Load data based on split type and range.
-
-    Parameters:
-        split_type (str): The split type ('year', 'month', or 'day').
-        range_val (int): The range value for the split type.
-        project_name (str): Name of the project directory.
-        start_year, end_year (int): Start and end years for filtering.
-        start_month, end_month, start_day, end_day (int, optional): Additional filters for months and days.
-        label_set (set, optional): Labels to include in the dataset.
-        test (bool): If True, load data after the end date for testing.
-
-    Returns:
-        pd.DataFrame: Combined data filtered by the specified range and labels.
+    Load data based on split type and range with consistent label mapping.
     """
     def overlaps_year(file_start, file_end):
         return not (file_end < start_year or file_start > end_year)
@@ -115,16 +120,13 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
         else:
             raise ValueError("Invalid split_type. Must be 'year', 'month', or 'day'")
 
-    # Define data directory
     data_dir = Path(f"data/windows/{split_type}_range_{range_val}/{project_name}")
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
 
-    # Initialize dataframe
     df_all = pd.DataFrame()
     file_names = []
 
-    # Process each file
     for file in data_dir.glob("*.csv"):
         file_name = file.name
         file_start, file_end = parse_filename(file_name, split_type)
@@ -134,7 +136,7 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
                (split_type == "month" and (file_start[0] > end_year or (file_start[0] == end_year and file_start[1] > end_month))) or \
                (split_type == "day" and (file_start[0] > end_year or (file_start[0] == end_year and (file_start[1] > end_month or (file_start[1] == end_month and file_start[2] > end_day))))):
                 df = pd.read_csv(file)
-                df['file_name'] = file_name  # Add file_name column
+                df['file_name'] = file_name
                 df_all = pd.concat([df_all, df], ignore_index=True)
                 file_names.append(file_name)
         else:
@@ -142,40 +144,50 @@ def load_data(split_type, range_val, project_name, start_year, end_year, start_m
                (split_type == "month" and overlaps_month(file_start, file_end)) or \
                (split_type == "day" and overlaps_day(file_start, file_end)):
                 df = pd.read_csv(file)
-                df['file_name'] = file_name  # Add file_name column
+                df['file_name'] = file_name
                 df_all = pd.concat([df_all, df], ignore_index=True)
                 file_names.append(file_name)
 
     if df_all.empty:
         raise ValueError(f"No data found for the specified range in {data_dir}")
 
-    # Log the file names
     if test:
         logger.info(f"Files used for testing: {file_names}")
     else:
         logger.info(f"Files used for training: {file_names}")
 
-    # Data preprocessing
+    # Data preprocessing with consistent label mapping
     df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce', format='%Y-%m-%dT%H:%M:%S.%f+0000')
-    if label_set is not None:
-        df_all = df_all[df_all['label'].isin(label_set)]
+    if label_mapper.label_to_id:
+        df_all = df_all[df_all['label'].isin(label_mapper.label_to_id.keys())]
     df_all['text'] = df_all['title'] + " " + df_all['body']
-    df_all['labels'] = df_all['label'].map({label: i for i, label in enumerate(label_set)})
+    df_all['labels'] = label_mapper.map_labels(df_all['label'])
 
     return df_all
 
-
-def train_model(df_train_val, results_path, model_save_path, config, use_validation=True, split_size=0.3):
-    train_df, validation_df = train_test_split(df_train_val, test_size=split_size, random_state=42, stratify=df_train_val['labels'])
+def train_model(df_train_val, results_path, model_save_path, config, label_mapper, use_validation=True, split_size=0.3):
+    train_df, validation_df = train_test_split(
+        df_train_val, 
+        test_size=split_size, 
+        random_state=42, 
+        stratify=df_train_val['labels']
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
     train_dataset = CustomDataset(train_df['text'].to_numpy(), train_df['labels'].to_numpy(), tokenizer)
     validation_dataset = None
 
     if use_validation:
-        validation_dataset = CustomDataset(validation_df['text'].to_numpy(), validation_df['labels'].to_numpy(), tokenizer)
+        validation_dataset = CustomDataset(
+            validation_df['text'].to_numpy(),
+            validation_df['labels'].to_numpy(),
+            tokenizer
+        )
 
-    model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels=len(df_train_val['labels'].unique()))
+    model = AutoModelForSequenceClassification.from_pretrained(
+        config['model_name'],
+        num_labels=label_mapper.num_labels
+    )
 
     training_args = TrainingArguments(
         output_dir=results_path,
@@ -197,16 +209,29 @@ def train_model(df_train_val, results_path, model_save_path, config, use_validat
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
-        compute_metrics=lambda pred: classification_report(pred.label_ids, pred.predictions.argmax(-1), output_dict=True),
+        compute_metrics=lambda pred: classification_report(
+            pred.label_ids,
+            pred.predictions.argmax(-1),
+            output_dict=True
+        ),
     )
 
     trainer.train()
     model.save_pretrained(model_save_path)
     tokenizer.save_pretrained(model_save_path)
-    logger.info(f"Model saved to {model_save_path}")
+    
+    # Save label mapping along with the model
+    label_mapping_path = model_save_path / "label_mapping.yaml"
+    with open(label_mapping_path, 'w') as f:
+        yaml.dump({
+            'label_to_id': label_mapper.label_to_id,
+            'id_to_label': label_mapper.id_to_label
+        }, f)
+    
+    logger.info(f"Model and label mapping saved to {model_save_path}")
+    return trainer, model, tokenizer
 
-
-def evaluate_model(model, tokenizer, test_df, results_path):
+def evaluate_model(model, tokenizer, test_df, results_path, label_mapper):
     test_dataset = CustomDataset(test_df['text'].to_numpy(), test_df['labels'].to_numpy(), tokenizer)
     trainer = Trainer(model=model)
 
@@ -214,19 +239,25 @@ def evaluate_model(model, tokenizer, test_df, results_path):
     preds = predictions.predictions.argmax(-1)
     labels = test_df['labels'].to_numpy()
 
-    # Generate classification report for each file (if file_name column exists)
+    # Convert numeric predictions and labels back to original label names
+    pred_labels = label_mapper.inverse_map(preds)
+    true_labels = label_mapper.inverse_map(labels)
+
+    # Generate classification report for each file
     file_reports = {}
     if 'file_name' in test_df.columns:
         for file in test_df['file_name'].unique():
-            file_df = test_df[test_df['file_name'] == file]
-            file_labels = file_df['labels'].to_numpy()
-            file_preds = preds[test_df['file_name'] == file]
-            file_reports[file] = classification_report(file_labels, file_preds, output_dict=True)
-    else:
-        logger.warning("'file_name' column not found in test data. Skipping per-file classification reports.")
+            file_mask = test_df['file_name'] == file
+            file_true_labels = [true_labels[i] for i, mask in enumerate(file_mask) if mask]
+            file_pred_labels = [pred_labels[i] for i, mask in enumerate(file_mask) if mask]
+            file_reports[file] = classification_report(
+                file_true_labels,
+                file_pred_labels,
+                output_dict=True
+            )
 
     # Generate aggregated classification report
-    aggregated_report = classification_report(labels, preds, output_dict=True)
+    aggregated_report = classification_report(true_labels, pred_labels, output_dict=True)
 
     # Save reports and predictions
     with open(results_path / "file_reports.yaml", 'w') as f:
@@ -235,79 +266,96 @@ def evaluate_model(model, tokenizer, test_df, results_path):
     with open(results_path / "aggregated_report.yaml", 'w') as f:
         yaml.dump(aggregated_report, f)
 
-    test_df['predictions'] = preds
+    test_df['predicted_label'] = pred_labels
     test_df.to_csv(results_path / "predictions.csv", index=False)
 
     logger.info(f"Reports and predictions saved to {results_path}")
 
-
-# Main function
 def main(config_file):
     with open(config_file, 'r') as file:
         config = yaml.safe_load(file)
 
-    # Generate results path
     results_path = generate_results_path(
-        config['results_root'], config['split_type'], config['range'], config['project_name'],
-        config['start_year'], config['end_year'],
-        config.get('start_month'), config.get('end_month'),
-        config.get('start_day'), config.get('end_day')
+        config['results_root'],
+        config['split_type'],
+        config['range'],
+        config['project_name'],
+        config['start_year'],
+        config['end_year'],
+        config.get('start_month'),
+        config.get('end_month'),
+        config.get('start_day'),
+        config.get('end_day')
     )
 
-    # Define model save path
     model_save_path = results_path / "model"
-
-    # Create directories if they do not exist
     os.makedirs(results_path, exist_ok=True)
     os.makedirs(model_save_path, exist_ok=True)
 
-    # Load the label set from config or default to an empty set
+    # Initialize label mapper with the label set from config
     label_list = sorted(config.get('label_set', []))
-   
+    label_mapper = LabelMapper(label_set=label_list)
 
     if presaved_model_path := config.get('presaved_model_path'):
-        logger.info(f"Using pre-saved model from {presaved_model_path}. Skipping training.")
+        logger.info(f"Using pre-saved model from {presaved_model_path}. Loading saved label mapping.")
         model_save_path = Path(presaved_model_path)
+        # Load saved label mapping
+        with open(model_save_path / "label_mapping.yaml", 'r') as f:
+            mapping_data = yaml.safe_load(f)
+            label_mapper = LabelMapper(label_set=mapping_data['label_to_id'].keys())
     else:
-        # Load the training and validation data
+        # Load and train with consistent label mapping
         df_train_val = load_data(
-            config['split_type'], config['range'], config['project_name'],
-            config['start_year'], config['end_year'],
-            config.get('start_month'), config.get('end_month'),
-            config.get('start_day'), config.get('end_day'),
-            label_set=label_list
+            config['split_type'],
+            config['range'],
+            config['project_name'],
+            config['start_year'],
+            config['end_year'],
+            label_mapper,
+            config.get('start_month'),
+            config.get('end_month'),
+            config.get('start_day'),
+            config.get('end_day')
         )
 
-        # Train the model with optional validation and custom split size
         train_model(
             df_train_val,
             results_path,
             model_save_path,
             config,
+            label_mapper,
             use_validation=config.get('use_validation', True),
             split_size=config.get('split_size', 0.3)
         )
 
-    # Load the test data
+    # Load test data with the same label mapping
     df_test = load_data(
-        config['split_type'], config['range'], config['project_name'],
-        config['start_year'], config['end_year'],
-        config.get('start_month'), config.get('end_month'),
-        config.get('start_day'), config.get('end_day'),
-        label_set=label_list,
+        config['split_type'],
+        config['range'],
+        config['project_name'],
+        config['start_year'],
+        config['end_year'],
+        label_mapper,
+        config.get('start_month'),
+        config.get('end_month'),
+        config.get('start_day'),
+        config.get('end_day'),
         test=True
     )
 
-    # Evaluate the model on the test set
     model = AutoModelForSequenceClassification.from_pretrained(model_save_path)
     tokenizer = AutoTokenizer.from_pretrained(model_save_path)
-    evaluate_model(model, tokenizer, df_test, results_path)
+    evaluate_model(model, tokenizer, df_test, results_path, label_mapper)
 
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser(description="Train a classification model using a YAML config.")
-    parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Path to the YAML configuration file."
+    )
     args = parser.parse_args()
 
     main(args.config)
