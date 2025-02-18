@@ -2,15 +2,15 @@
 results_root: "results"
 split_type: "year"          # Options: "year", "month", "day"
 range: "1"                  # Define the range value
-project_name: "MongoDB"
-start_year: 2009
-end_year: 2013
+project_name: "Jira"
+start_year: 2002
+end_year: 2006
 start_month: 1              # Optional, required for "month" or "day" splits
 end_month: 12               # Optional, required for "month" or "day" splits
 start_day: 1                # Optional, required for "day" splits
 end_day: 31                 # Optional, required for "day" splits
 
-labels:                     # Specify which labels to include
+label_set:                     # Specify which labels to include
   - bug
   - feature
 

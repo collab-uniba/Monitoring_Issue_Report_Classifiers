@@ -1,0 +1,63 @@
+# Configuration for training
+results_root: "results"
+split_type: "month"          # Options: "year", "month", "day"
+range: "1"                  # Define the range value
+project_name: "Jira"
+start_year: 2002
+end_year: 2006
+start_month: 1              # Optional, required for "month" or "day" splits
+end_month: 12               # Optional, required for "month" or "day" splits
+start_day: 1                # Optional, required for "day" splits
+end_day: 31                 # Optional, required for "day" splits
+
+label_set:                     # Specify which labels to include
+  - bug
+  - feature
+
+use_validation: false        # Whether to use a validation set
+split_size: 0.3             # Size of the validation split (if use_validation is true)
+
+model_name: "roberta-base"  # Pretrained model name
+training_args:              # Training arguments for the Trainer
+  num_train_epochs: 4
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 32
+  warmup_steps: 500
+  weight_decay: 0.01
+  logging_dir: "logs"
+  learning_rate: 2e-5
+  adam_epsilon: 1e-8
+  eval_steps: 100
+presaved_model_path: "results/year_range_1/2002-2006/Jira/model"
+colavito@titan:~/Monitoring_Issue_Report_Classifiers/classification$ cat config-mongodb.yaml
+# Configuration for training
+results_root: "results"
+split_type: "month"          # Options: "year", "month", "day"
+range: "1"                  # Define the range value
+project_name: "MongoDB"
+start_year: 2009
+end_year: 2013
+start_month: 1              # Optional, required for "month" or "day" splits
+end_month: 12               # Optional, required for "month" or "day" splits
+start_day: 1                # Optional, required for "day" splits
+end_day: 31                 # Optional, required for "day" splits
+
+label_set:                     # Specify which labels to include
+  - bug
+  - feature
+
+use_validation: false        # Whether to use a validation set
+split_size: 0.3             # Size of the validation split (if use_validation is true)
+
+model_name: "roberta-base"  # Pretrained model name
+training_args:              # Training arguments for the Trainer
+  num_train_epochs: 4
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 32
+  warmup_steps: 500
+  weight_decay: 0.01
+  logging_dir: "logs"
+  learning_rate: 2e-5
+  adam_epsilon: 1e-8
+  eval_steps: 100
+presaved_model_path: "results/year_range_1/2009-2013/MongoDB/model"
