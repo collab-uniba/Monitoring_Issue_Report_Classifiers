@@ -93,7 +93,7 @@ def load_data(split_type, range_val, project_name, start_year, end_year, label_m
     Load data based on split type and range with consistent label mapping.
     """
     def overlaps_year(file_start, file_end):
-        return not (file_end < start_year or file_start > end_year)
+        return file_end >= start_year and file_start <= end_year
 
     def overlaps_month(file_start, file_end):
         return not (
@@ -113,19 +113,19 @@ def load_data(split_type, range_val, project_name, start_year, end_year, label_m
         if split_type == "year":
             start_year, end_year = map(int, file.replace('.csv', '').split('-'))
             return start_year, end_year
-        
+
         elif split_type == "month":
             start_part, end_part = file.replace('.csv', '').split('_')
             start_year, start_month = map(int, start_part.split('-'))
             end_year, end_month = map(int, end_part.split('-'))
             return (start_year, start_month), (end_year, end_month)
-        
+
         elif split_type == "day":
             start_part, end_part = file.replace('.csv', '').split('_')
             start_year, start_month, start_day = map(int, start_part.split('-'))
             end_year, end_month, end_day = map(int, end_part.split('-'))
             return (start_year, start_month, start_day), (end_year, end_month, end_day)
-        
+
         else:
             raise ValueError("Invalid split_type. Must be 'year', 'month', or 'day'")
 
@@ -165,15 +165,14 @@ def load_data(split_type, range_val, project_name, start_year, end_year, label_m
     else:
         logger.info(f"Files used for training: {file_names}")
 
-       # Data preprocessing with consistent label mapping
     df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce', format='%Y-%m-%dT%H:%M:%S.%f+0000')
     if label_mapper.label_to_id:
         df_all = df_all[df_all['label'].isin(label_mapper.label_to_id.keys())]
     df_all['text'] = df_all['title'] + " " + df_all['body']
-    
+
     # Ensure labels are properly mapped to integers
     df_all['labels'] = label_mapper.map_labels(df_all['label']).astype(int)
-    
+
     # Add validation check
     if df_all['labels'].isna().any():
         raise ValueError("Some labels could not be mapped to integers")
