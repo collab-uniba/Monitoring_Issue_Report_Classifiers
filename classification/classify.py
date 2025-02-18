@@ -17,10 +17,18 @@ logger = logging.getLogger(__name__)
 class LabelMapper:
     """
     Maintains consistent label mapping across training and testing.
+    Labels are sorted alphabetically and mapped to sequential integers starting from 0.
     """
     def __init__(self, label_set=None):
-        self.label_to_id = {label: i for i, label in enumerate(sorted(label_set))} if label_set else {}
-        self.id_to_label = {i: label for label, i in self.label_to_id.items()} if label_set else {}
+        if label_set:
+            # Sort labels alphabetically
+            sorted_labels = sorted(label_set)
+            # Create mappings with sequential integers
+            self.label_to_id = {label: idx for idx, label in enumerate(sorted_labels)}
+            self.id_to_label = dict(enumerate(sorted_labels))
+        else:
+            self.label_to_id = {}
+            self.id_to_label = {}
     
     def map_labels(self, labels):
         return labels.map(self.label_to_id)
@@ -31,7 +39,8 @@ class LabelMapper:
     @property
     def num_labels(self):
         return len(self.label_to_id)
-
+    
+    
 class CustomDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_token_len=512):
         self.tokenizer = tokenizer
@@ -156,38 +165,44 @@ def load_data(split_type, range_val, project_name, start_year, end_year, label_m
     else:
         logger.info(f"Files used for training: {file_names}")
 
-    # Data preprocessing with consistent label mapping
+       # Data preprocessing with consistent label mapping
     df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce', format='%Y-%m-%dT%H:%M:%S.%f+0000')
     if label_mapper.label_to_id:
         df_all = df_all[df_all['label'].isin(label_mapper.label_to_id.keys())]
     df_all['text'] = df_all['title'] + " " + df_all['body']
-    df_all['labels'] = label_mapper.map_labels(df_all['label'])
-
+    
+    # Ensure labels are properly mapped to integers
+    df_all['labels'] = label_mapper.map_labels(df_all['label']).astype(int)
+    
+    # Add validation check
+    if df_all['labels'].isna().any():
+        raise ValueError("Some labels could not be mapped to integers")
     return df_all
 
 def train_model(df_train_val, results_path, model_save_path, config, label_mapper, use_validation=True, split_size=0.3):
-    train_df, validation_df = train_test_split(
-        df_train_val, 
-        test_size=split_size, 
-        random_state=42, 
-        stratify=df_train_val['labels']
-    )
-
     tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
-    train_dataset = CustomDataset(train_df['text'].to_numpy(), train_df['labels'].to_numpy(), tokenizer)
-    validation_dataset = None
 
     if use_validation:
+        train_df, validation_df = train_test_split(
+            df_train_val, 
+            test_size=split_size, 
+            random_state=42, 
+            stratify=df_train_val['labels']
+        )
+        train_dataset = CustomDataset(train_df['text'].to_numpy(), train_df['labels'].to_numpy(), tokenizer)
         validation_dataset = CustomDataset(
             validation_df['text'].to_numpy(),
             validation_df['labels'].to_numpy(),
             tokenizer
         )
-
-    model = AutoModelForSequenceClassification.from_pretrained(
-        config['model_name'],
-        num_labels=label_mapper.num_labels
-    )
+    else:
+        # Use entire dataset for training when validation is disabled
+        train_dataset = CustomDataset(df_train_val['text'].to_numpy(), df_train_val['labels'].to_numpy(), tokenizer)
+        validation_dataset = None
+        model = AutoModelForSequenceClassification.from_pretrained(
+            config['model_name'],
+            num_labels=label_mapper.num_labels
+        )
 
     training_args = TrainingArguments(
         output_dir=results_path,
