@@ -60,8 +60,17 @@ def compute_embeddings(texts, model, batch_size=32):
 
 def get_test_periods(data_dir, split_type, end_cutoff):
     """
-    Get all available test periods from the data directory that come after the end_cutoff.
+    Get all available test periods from the data directory that come strictly after the end_cutoff.
+    For monthly splits, ensures the end_cutoff month itself is excluded.
     """
+    # Log training cutoff information
+    if split_type == "year":
+        logger.info(f"Training data cutoff: Year {end_cutoff}")
+    elif split_type == "month":
+        logger.info(f"Training data cutoff: Year {end_cutoff[0]}, Month {end_cutoff[1]}")
+    elif split_type == "day":
+        logger.info(f"Training data cutoff: Year {end_cutoff[0]}, Month {end_cutoff[1]}, Day {end_cutoff[2]}")
+    
     test_periods = []
     
     for file_path in sorted(data_dir.glob("*.csv")):
@@ -75,20 +84,51 @@ def get_test_periods(data_dir, split_type, end_cutoff):
         elif split_type == "month":
             start_part = file_name.split('_')[0]
             start_year, start_month = map(int, start_part.split('-'))
-            if (start_year, start_month) > end_cutoff:
+            # Strictly after the end cutoff - if end_cutoff is (2005, 12), start with 2006-01
+            if start_year > end_cutoff[0] or (start_year == end_cutoff[0] and start_month > end_cutoff[1]):
                 test_periods.append((start_year, start_month))
         
         elif split_type == "day":
             start_part = file_name.split('_')[0]
             start_year, start_month, start_day = map(int, start_part.split('-'))
-            if (start_year, start_month, start_day) > end_cutoff:
+            if (start_year > end_cutoff[0] or 
+                (start_year == end_cutoff[0] and start_month > end_cutoff[1]) or
+                (start_year == end_cutoff[0] and start_month == end_cutoff[1] and start_day > end_cutoff[2])):
                 test_periods.append((start_year, start_month, start_day))
+    
+    # Log test periods information
+    logger.info(f"Found {len(test_periods)} test periods after the training cutoff")
+    if test_periods:
+        if split_type == "year":
+            logger.info(f"Test periods: Years {min(test_periods)} to {max(test_periods)}")
+        elif split_type == "month":
+            start_year, start_month = min(test_periods)
+            end_year, end_month = max(test_periods)
+            logger.info(f"Test periods: {start_year}-{start_month:02d} to {end_year}-{end_month:02d}")
+        elif split_type == "day":
+            start_year, start_month, start_day = min(test_periods)
+            end_year, end_month, end_day = max(test_periods)
+            logger.info(f"Test periods: {start_year}-{start_month:02d}-{start_day:02d} to {end_year}-{end_month:02d}-{end_day:02d}")
+    else:
+        logger.warning("No test periods found after the cutoff date")
     
     return sorted(test_periods)
 
 def analyze_similarity(config_file):
     with open(config_file, 'r') as file:
         config = yaml.safe_load(file)
+    
+    # Log configuration information
+    logger.info("Analysis Configuration:")
+    logger.info(f"Project: {config['project_name']}")
+    logger.info(f"Split type: {config['split_type']}")
+    logger.info(f"Training period:")
+    logger.info(f"  Start: Year {config['start_year']}" + 
+                (f", Month {config['start_month']}" if 'start_month' in config else "") +
+                (f", Day {config['start_day']}" if 'start_day' in config else ""))
+    logger.info(f"  End: Year {config['end_year']}" +
+                (f", Month {config['end_month']}" if 'end_month' in config else "") +
+                (f", Day {config['end_day']}" if 'end_day' in config else ""))
     
     results_path = generate_results_path(
         config['results_root'],
