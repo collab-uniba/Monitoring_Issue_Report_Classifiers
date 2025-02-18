@@ -160,11 +160,6 @@ def load_data(split_type, range_val, project_name, start_year, end_year, label_m
     if df_all.empty:
         raise ValueError(f"No data found for the specified range in {data_dir}")
 
-    if test:
-        logger.info(f"Files used for testing: {file_names}")
-    else:
-        logger.info(f"Files used for training: {file_names}")
-
     df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce', format='%Y-%m-%dT%H:%M:%S.%f+0000')
     if label_mapper.label_to_id:
         df_all = df_all[df_all['label'].isin(label_mapper.label_to_id.keys())]
