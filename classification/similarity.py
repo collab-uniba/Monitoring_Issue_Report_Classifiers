@@ -18,6 +18,14 @@ from classify import load_data, generate_results_path, LabelMapper
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+def preprocess_text(text):
+    """
+    Preprocess text data to ensure it's in the correct format for encoding.
+    """
+    if pd.isna(text) or text is None:
+        return ""
+    return str(text).strip()
+
 def calculate_average_similarity(train_embeddings, test_embeddings, batch_size=1000):
     """
     Calculate average cosine similarity between two sets of embeddings using batching
@@ -51,7 +59,15 @@ def compute_embeddings(texts, model, batch_size=32):
     Compute embeddings for a list of texts using batching.
     Returns embeddings as PyTorch tensors.
     """
-    return model.encode(texts, batch_size=batch_size, show_progress_bar=True, convert_to_tensor=True)
+    # Preprocess all texts
+    processed_texts = [preprocess_text(text) for text in texts]
+    
+    # Log some statistics about the processed texts
+    empty_texts = sum(1 for text in processed_texts if not text)
+    if empty_texts > 0:
+        logger.warning(f"Found {empty_texts} empty texts after preprocessing")
+    
+    return model.encode(processed_texts, batch_size=batch_size, show_progress_bar=True, convert_to_tensor=True)
 
 def analyze_similarity(config_file):
     # Load configuration
@@ -90,6 +106,14 @@ def analyze_similarity(config_file):
         config.get('start_day'),
         config.get('end_day')
     )
+    
+    # Ensure text column exists and is properly formatted
+    if 'text' not in train_df.columns:
+        logger.info("Creating text column by combining title and body...")
+        train_df['text'] = train_df.apply(
+            lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}",
+            axis=1
+        )
     
     # Initialize sentence transformer model
     logger.info("Loading Sentence Transformer model...")
@@ -164,6 +188,13 @@ def analyze_similarity(config_file):
             )
         
         if not test_df.empty:
+            # Ensure text column exists in test data
+            if 'text' not in test_df.columns:
+                test_df['text'] = test_df.apply(
+                    lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}",
+                    axis=1
+                )
+            
             logger.info(f"Computing embeddings for test period {period_format(period)}...")
             test_embeddings = compute_embeddings(test_df['text'].tolist(), model).to(device)
             
