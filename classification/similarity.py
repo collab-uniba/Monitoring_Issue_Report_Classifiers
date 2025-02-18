@@ -22,9 +22,7 @@ def preprocess_text(text):
     """
     Preprocess text data to ensure it's in the correct format for encoding.
     """
-    if pd.isna(text) or text is None:
-        return ""
-    return str(text).strip()
+    return "" if pd.isna(text) or text is None else str(text).strip()
 
 def calculate_average_similarity(train_embeddings, test_embeddings, batch_size=1000):
     """
@@ -61,13 +59,14 @@ def compute_embeddings(texts, model, batch_size=32):
     """
     # Preprocess all texts
     processed_texts = [preprocess_text(text) for text in texts]
-    
+
     # Log some statistics about the processed texts
-    empty_texts = sum(1 for text in processed_texts if not text)
+    empty_texts = sum(not text for text in processed_texts)
     if empty_texts > 0:
         logger.warning(f"Found {empty_texts} empty texts after preprocessing")
-    
+
     return model.encode(processed_texts, batch_size=batch_size, show_progress_bar=True, convert_to_tensor=True)
+
 
 def analyze_similarity(config_file):
     # Load configuration
@@ -101,19 +100,11 @@ def analyze_similarity(config_file):
         config['start_year'],
         config['end_year'],
         label_mapper,
-        config.get('start_month'),
-        config.get('end_month'),
-        config.get('start_day'),
-        config.get('end_day')
+        start_month=config.get('start_month'),
+        end_month=config.get('end_month'),
+        start_day=config.get('start_day'),
+        end_day=config.get('end_day')
     )
-    
-    # Ensure text column exists and is properly formatted
-    if 'text' not in train_df.columns:
-        logger.info("Creating text column by combining title and body...")
-        train_df['text'] = train_df.apply(
-            lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}",
-            axis=1
-        )
     
     # Initialize sentence transformer model
     logger.info("Loading Sentence Transformer model...")
@@ -134,7 +125,7 @@ def analyze_similarity(config_file):
         test_periods = pd.date_range(
             start=f"{config['end_year']}-{config['end_month']}",
             periods=12,
-            freq='M'
+            freq='ME'  # Changed from 'M' to 'ME' to address deprecation warning
         )
         period_format = lambda x: f"{x.year}-{x.month:02d}"
     elif config['split_type'] == 'day':
@@ -167,9 +158,9 @@ def analyze_similarity(config_file):
                 config['project_name'],
                 period.year,
                 period.year,
-                period.month,
-                period.month,
                 label_mapper,
+                start_month=period.month,
+                end_month=period.month,
                 test=True
             )
         else:  # day
@@ -179,11 +170,11 @@ def analyze_similarity(config_file):
                 config['project_name'],
                 period.year,
                 period.year,
-                period.month,
-                period.month,
-                period.day,
-                period.day,
                 label_mapper,
+                start_month=period.month,
+                end_month=period.month,
+                start_day=period.day,
+                end_day=period.day,
                 test=True
             )
         
@@ -206,6 +197,11 @@ def analyze_similarity(config_file):
                 'similarity': avg_similarity,
                 'num_samples': len(test_df)
             })
+            
+            # Free up GPU memory if using CUDA
+            if torch.cuda.is_available():
+                del test_embeddings
+                torch.cuda.empty_cache()
     
     # Convert results to DataFrame and save
     results_df = pd.DataFrame(similarity_results)
