@@ -293,10 +293,13 @@ def load_data(split_type: str, range_val: str, project_name: str,
     )
     
     logger.info(f"Searching for data in time window: {target}")
-    if exact_date:
-        matching_files = loader._get_files_in_range(target, split_type, test)
+    if not test:
+        matching_files = loader._get_files_in_range(target, split_type, test=False)
     else:
-        matching_files = loader._get_files_after_range(target, split_type, test)
+        if exact_date:
+            matching_files = loader._get_files_in_range(target, split_type, test=True)
+        else:
+            matching_files = loader._get_files_after_range(target, split_type, test=True)
     
     if not matching_files:
         logger.error(f"No matching files found for window {target}")
