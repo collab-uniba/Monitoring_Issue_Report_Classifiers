@@ -22,9 +22,7 @@ def preprocess_text(text):
     """
     Preprocess text data to ensure it's in the correct format for encoding.
     """
-    if pd.isna(text) or text is None:
-        return ""
-    return str(text).strip()
+    return "" if pd.isna(text) or text is None else str(text).strip()
 
 def calculate_average_similarity(train_embeddings, test_embeddings, batch_size=1000):
     """
@@ -52,10 +50,10 @@ def compute_embeddings(texts, model, batch_size=32):
     Compute embeddings for a list of texts using batching.
     """
     processed_texts = [preprocess_text(text) for text in texts]
-    empty_texts = sum(1 for text in processed_texts if not text)
+    empty_texts = sum(not text for text in processed_texts)
     if empty_texts > 0:
         logger.warning(f"Found {empty_texts} empty texts after preprocessing")
-    
+
     return model.encode(processed_texts, batch_size=batch_size, show_progress_bar=True, convert_to_tensor=True)
 
 def get_test_periods(data_dir, split_type, end_cutoff):
@@ -117,19 +115,19 @@ def get_test_periods(data_dir, split_type, end_cutoff):
 def analyze_similarity(config_file):
     with open(config_file, 'r') as file:
         config = yaml.safe_load(file)
-    
+
     # Log configuration information
     logger.info("Analysis Configuration:")
     logger.info(f"Project: {config['project_name']}")
     logger.info(f"Split type: {config['split_type']}")
-    logger.info(f"Training period:")
+    logger.info("Training period:")
     logger.info(f"  Start: Year {config['start_year']}" + 
                 (f", Month {config['start_month']}" if 'start_month' in config else "") +
                 (f", Day {config['start_day']}" if 'start_day' in config else ""))
     logger.info(f"  End: Year {config['end_year']}" +
                 (f", Month {config['end_month']}" if 'end_month' in config else "") +
                 (f", Day {config['end_day']}" if 'end_day' in config else ""))
-    
+
     results_path = generate_results_path(
         config['results_root'],
         config['split_type'],
@@ -142,12 +140,12 @@ def analyze_similarity(config_file):
         config.get('start_day'),
         config.get('end_day')
     )
-    
+
     similarity_path = results_path / "similarity_analysis"
     os.makedirs(similarity_path, exist_ok=True)
-    
+
     label_mapper = LabelMapper(label_set=config.get('label_set', []))
-    
+
     # Load training data
     train_df = load_data(
         config['split_type'],
@@ -161,38 +159,38 @@ def analyze_similarity(config_file):
         start_day=config.get('start_day'),
         end_day=config.get('end_day')
     )
-    
+
     # Ensure text column exists
     if 'text' not in train_df.columns:
         train_df['text'] = train_df.apply(
             lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}",
             axis=1
         )
-    
+
     logger.info("Loading Sentence Transformer model...")
     model = SentenceTransformer('all-MiniLM-L6-v2')
-    
+
     logger.info("Computing embeddings for training data...")
     train_embeddings = compute_embeddings(train_df['text'].tolist(), model)
-    
+
     # Get data directory and end cutoff based on split type
     data_dir = Path(f"data/windows/{config['split_type']}_range_{config['range']}/{config['project_name']}")
-    
+
     if config['split_type'] == 'year':
         end_cutoff = config['end_year']
     elif config['split_type'] == 'month':
         end_cutoff = (config['end_year'], config['end_month'])
     else:  # day
         end_cutoff = (config['end_year'], config['end_month'], config['end_day'])
-    
+
     # Get all available test periods
     test_periods = get_test_periods(data_dir, config['split_type'], end_cutoff)
     logger.info(f"Found {len(test_periods)} test periods after the training cutoff")
-    
+
     similarity_results = []
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_embeddings = train_embeddings.to(device)
-    
+
     for period in test_periods:
         if config['split_type'] == 'year':
             test_df = load_data(
@@ -202,7 +200,8 @@ def analyze_similarity(config_file):
                 period,
                 period,
                 label_mapper,
-                test=True
+                test=True,
+                exact_date=True
             )
             period_str = str(period)
         elif config['split_type'] == 'month':
@@ -216,7 +215,8 @@ def analyze_similarity(config_file):
                 label_mapper,
                 start_month=month,
                 end_month=month,
-                test=True
+                test=True,
+                exact_date=True
             )
             period_str = f"{year}-{month:02d}"
         else:  # day
@@ -232,47 +232,54 @@ def analyze_similarity(config_file):
                 end_month=month,
                 start_day=day,
                 end_day=day,
-                test=True
+                test=True,
+                exact_date=True
             )
             period_str = f"{year}-{month:02d}-{day:02d}"
-        
+
         if not test_df.empty:
             if 'text' not in test_df.columns:
                 test_df['text'] = test_df.apply(
                     lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}",
                     axis=1
                 )
-            
+
             logger.info(f"Computing embeddings for test period {period_str}...")
             test_embeddings = compute_embeddings(test_df['text'].tolist(), model).to(device)
-            
+
             logger.info(f"Calculating similarity for test period {period_str}...")
             avg_similarity = calculate_average_similarity(train_embeddings, test_embeddings)
-            
+
             similarity_results.append({
                 'period': period_str,
                 'similarity': avg_similarity,
                 'num_samples': len(test_df)
             })
-            
+
             if torch.cuda.is_available():
                 del test_embeddings
                 torch.cuda.empty_cache()
-    
-    results_df = pd.DataFrame(similarity_results)
-    results_df.to_csv(similarity_path / "similarity_scores.csv", index=False)
-    
-    plt.figure(figsize=(12, 6))
-    plt.plot(results_df['period'], results_df['similarity'], marker='o')
-    plt.title(f"Average Similarity Over Time\n{config['project_name']} - {config['split_type']} split")
-    plt.xlabel(config['split_type'].capitalize())
-    plt.ylabel("Average Cosine Similarity")
-    plt.xticks(rotation=45)
-    plt.grid(True)
-    plt.tight_layout()
-    
-    plt.savefig(similarity_path / "similarity_trend.png")
-    logger.info(f"Results saved to {similarity_path}")
+
+        # Create DataFrame
+        results_df = pd.DataFrame(similarity_results)
+        results_df.to_csv(similarity_path / "similarity_scores.csv", index=False)
+
+        # Plot
+        plt.figure(figsize=(10, 6))
+        plt.plot(results_df['period'], results_df['similarity'], marker='o')
+        plt.title(f"Average Similarity Over Time\n{config['project_name']} - {config['split_type']} split")
+        plt.xlabel(config['split_type'].capitalize())
+        plt.ylabel("Average Cosine Similarity")
+
+        # Set x-ticks every 12 periods
+        plt.xticks(results_df['period'][::12], rotation=45)
+
+        plt.grid(True)
+        plt.tight_layout()
+
+        # Save figure
+        plt.savefig(similarity_path / "similarity_trend.png")
+        logger.info(f"Results saved to {similarity_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze similarity between train and test sets.")
