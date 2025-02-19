@@ -50,9 +50,10 @@ def compute_embeddings(texts, model, batch_size=32):
     Compute embeddings for a list of texts using batching.
     """
     processed_texts = [preprocess_text(text) for text in texts]
-    empty_texts = sum(not text for text in processed_texts)
+    # Only count as empty if the final processed text is empty
+    empty_texts = sum(not text.strip() for text in processed_texts)
     if empty_texts > 0:
-        logger.warning(f"Found {empty_texts} empty texts after preprocessing")
+        logger.warning(f"Found {empty_texts} completely empty texts after preprocessing")
 
     return model.encode(processed_texts, batch_size=batch_size, show_progress_bar=True, convert_to_tensor=True)
 
@@ -161,11 +162,11 @@ def analyze_similarity(config_file):
     )
 
     # Ensure text column exists
-    if 'text' not in train_df.columns:
-        train_df['text'] = train_df.apply(
-            lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}",
-            axis=1
-        )
+    
+    train_df['text'] = train_df.apply(
+        lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}".strip(),
+        axis=1
+    )
 
     logger.info("Loading Sentence Transformer model...")
     model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -238,11 +239,10 @@ def analyze_similarity(config_file):
             period_str = f"{year}-{month:02d}-{day:02d}"
 
         if not test_df.empty:
-            if 'text' not in test_df.columns:
-                test_df['text'] = test_df.apply(
-                    lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}",
-                    axis=1
-                )
+            test_df['text'] = test_df.apply(
+                lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}".strip(),
+                axis=1
+            )
 
             logger.info(f"Computing embeddings for test period {period_str}...")
             test_embeddings = compute_embeddings(test_df['text'].tolist(), model).to(device)
