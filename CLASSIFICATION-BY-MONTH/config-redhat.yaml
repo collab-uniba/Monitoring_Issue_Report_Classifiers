@@ -1,8 +1,0 @@
-dataset_path: "../CSV/STANDARD/MAPPED/RedHat.csv"
-start_year: 2006
-end_year: 2022
-start_month: 1
-end_month: 12
-start_year_train: 2001
-end_year_train: 2005
-undersampling_flag: True
