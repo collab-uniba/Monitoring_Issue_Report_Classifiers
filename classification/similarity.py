@@ -272,7 +272,10 @@ def analyze_similarity(config_file):
         plt.ylabel("Average Cosine Similarity")
 
         # Set x-ticks every 12 periods
-        plt.xticks(results_df['period'][::12], rotation=45)
+        if config['split_type'] == "month":
+            plt.xticks(results_df['period'][::12], rotation=45)
+        elif config['split_type'] == "day":
+            plt.xticks(results_df['period'][::365], rotation=45)
 
         plt.grid(True)
         plt.tight_layout()
