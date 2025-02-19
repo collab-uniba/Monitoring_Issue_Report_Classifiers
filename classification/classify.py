@@ -9,6 +9,10 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trai
 from torch.utils.data import Dataset
 from sklearn.metrics import classification_report
 from pathlib import Path
+from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional, Tuple, List
+import re
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -74,6 +78,180 @@ class CustomDataset(Dataset):
             'labels': torch.tensor(labels, dtype=torch.long)
         }
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@dataclass
+class TimeWindow:
+    start_year: int
+    end_year: int
+    start_month: Optional[int] = None
+    end_month: Optional[int] = None
+    start_day: Optional[int] = None
+    end_day: Optional[int] = None
+
+    def __lt__(self, other):
+        self_tuple = (self.start_year, self.start_month or 0, self.start_day or 0)
+        other_tuple = (other.start_year, other.start_month or 0, other.start_day or 0)
+        return self_tuple < other_tuple
+
+    def __str__(self):
+        if self.start_month is None:
+            return f"{self.start_year}-{self.end_year}"
+        elif self.start_day is None:
+            return f"{self.start_year}-{self.start_month:02d} to {self.end_year}-{self.end_month:02d}"
+        else:
+            return f"{self.start_year}-{self.start_month:02d}-{self.start_day:02d} to {self.end_year}-{self.end_month:02d}-{self.end_day:02d}"
+
+class DataLoader:
+    def __init__(self, data_dir: Path):
+        self.data_dir = data_dir
+        self.file_cache = {}
+        
+    def _parse_filename(self, filename: str) -> TimeWindow:
+        logger.debug(f"Parsing filename: {filename}")
+        if '-' not in filename:
+            raise ValueError(f"Invalid filename format: {filename}")
+            
+        filename = filename.replace('.csv', '')
+        
+        if '_' not in filename:  # Year pattern
+            start_year, end_year = map(int, filename.split('-'))
+            return TimeWindow(start_year=start_year, end_year=end_year)
+        
+        start_part, end_part = filename.split('_')
+        
+        if '-' in start_part:  # Month pattern
+            if len(start_part.split('-')) == 2:
+                start_year, start_month = map(int, start_part.split('-'))
+                end_year, end_month = map(int, end_part.split('-'))
+                window = TimeWindow(
+                    start_year=start_year, end_year=end_year,
+                    start_month=start_month, end_month=end_month
+                )
+                logger.debug(f"Parsed month window: {window}")
+                return window
+            else:  # Day pattern
+                start_year, start_month, start_day = map(int, start_part.split('-'))
+                end_year, end_month, end_day = map(int, end_part.split('-'))
+                return TimeWindow(
+                    start_year=start_year, end_year=end_year,
+                    start_month=start_month, end_month=end_month,
+                    start_day=start_day, end_day=end_day
+                )
+        
+        raise ValueError(f"Unrecognized filename pattern: {filename}")
+
+    def _get_files_after_range(self, target: TimeWindow, split_type: str, test: bool = False) -> List[str]:
+        logger.info(f"Searching for files in range: {target}, split_type: {split_type}, test: {test}")
+        
+        if split_type not in self.file_cache:
+            files = list(self.data_dir.glob("*.csv"))
+            logger.info(f"Found {len(files)} total files in directory")
+            self.file_cache[split_type] = {
+                file.name: self._parse_filename(file.name) 
+                for file in files
+            }
+            logger.info(f"Cached {len(self.file_cache[split_type])} files")
+        
+        matching_files = []
+        for filename, window in self.file_cache[split_type].items():
+            logger.debug(f"Checking file {filename} with window {window}")
+            
+            if test:
+                if split_type == "month":
+                    matches = (window.start_year > target.end_year or 
+                             (window.start_year == target.end_year and window.start_month > target.end_month) or
+                             (window.start_year == target.end_year and window.start_month == target.end_month))
+                    logger.debug(f"Test condition for {filename}: {matches}")
+                    if matches:
+                        matching_files.append(filename)
+                        logger.info(f"Including test file: {filename}")
+                    else:
+                        logger.debug(f"Skipping test file: {filename}")
+            else:
+                if split_type == "month":
+                    overlaps = not (window.end_year < target.start_year or 
+                                  window.start_year > target.end_year or
+                                  (window.end_year == target.start_year and window.end_month < target.start_month) or
+                                  (window.start_year == target.end_year and window.start_month > target.end_month))
+                    if overlaps:
+                        matching_files.append(filename)
+                        logger.info(f"Including training file: {filename}")
+                    else:
+                        logger.debug(f"Skipping training file: {filename}")
+        
+        logger.info(f"Found {len(matching_files)} matching files")
+        return sorted(matching_files)
+    
+    def _get_files_in_range(self, target: TimeWindow, split_type: str, test: bool = False) -> List[str]:
+        logger.info(f"Searching for files in range: {target}, split_type: {split_type}, test: {test}")
+        
+        if split_type not in self.file_cache:
+            files = list(self.data_dir.glob("*.csv"))
+            logger.info(f"Found {len(files)} total files in directory")
+            self.file_cache[split_type] = {
+                file.name: self._parse_filename(file.name) 
+                for file in files
+            }
+        
+        matching_files = []
+        for filename, window in self.file_cache[split_type].items():
+            if test:
+                # For test data, only include the exact period we're looking for
+                if split_type == "month":
+                    if (window.start_year == target.start_year and 
+                        window.start_month == target.start_month and
+                        window.end_year == target.end_year and 
+                        window.end_month == target.end_month):
+                        matching_files.append(filename)
+                        logger.info(f"Including test file: {filename}")
+                elif split_type == "day":
+                    if (window.start_year == target.start_year and 
+                        window.start_month == target.start_month and
+                        window.start_day == target.start_day and
+                        window.end_year == target.end_year and 
+                        window.end_month == target.end_month and
+                        window.end_day == target.end_day):
+                        matching_files.append(filename)
+                        logger.info(f"Including test file: {filename}")
+                else:  # year
+                    if (window.start_year == target.start_year and 
+                        window.end_year == target.end_year):
+                        matching_files.append(filename)
+                        logger.info(f"Including test file: {filename}")
+            else:
+                # For training data, include files that overlap with the target window
+                if split_type == "month":
+                    overlaps = not (window.end_year < target.start_year or 
+                                  window.start_year > target.end_year or
+                                  (window.end_year == target.start_year and window.end_month < target.start_month) or
+                                  (window.start_year == target.end_year and window.start_month > target.end_month))
+                    if overlaps:
+                        matching_files.append(filename)
+                        logger.info(f"Including training file: {filename}")
+                elif split_type == "day":
+                    overlaps = not (
+                        window.end_year < target.start_year or
+                        window.start_year > target.end_year or
+                        (window.end_year == target.start_year and 
+                         (window.end_month < target.start_month or
+                          (window.end_month == target.start_month and window.end_day < target.start_day))) or
+                        (window.start_year == target.end_year and
+                         (window.start_month > target.end_month or
+                          (window.start_month == target.end_month and window.start_day > target.end_day)))
+                    )
+                    if overlaps:
+                        matching_files.append(filename)
+                        logger.info(f"Including training file: {filename}")
+                else:  # year
+                    if window.end_year >= target.start_year and window.start_year <= target.end_year:
+                        matching_files.append(filename)
+                        logger.info(f"Including training file: {filename}")
+        
+        return sorted(matching_files)
+
+    
 def generate_results_path(root_path, split_type, range_val, project_name, start_year, end_year, 
                          start_month=None, end_month=None, start_day=None, end_day=None):
     path = Path(root_path) / f"{split_type}_range_{range_val}"
@@ -87,90 +265,65 @@ def generate_results_path(root_path, split_type, range_val, project_name, start_
     path /= project_name
     return path
 
-def load_data(split_type, range_val, project_name, start_year, end_year, label_mapper, 
-              start_month=None, end_month=None, start_day=None, end_day=None, test=False):
+def load_data(split_type: str, range_val: str, project_name: str, 
+              start_year: int, end_year: int, label_mapper,
+              start_month: Optional[int] = None, end_month: Optional[int] = None,
+              start_day: Optional[int] = None, end_day: Optional[int] = None,
+              test: bool = False, exact_date: bool = False) -> pd.DataFrame:
     """
-    Load data based on split type and range with consistent label mapping.
+    Load data based on split type and range with optimized file searching.
     """
-    def overlaps_year(file_start, file_end):
-        return file_end >= start_year and file_start <= end_year
-
-    def overlaps_month(file_start, file_end):
-        return not (
-            file_end[0] < start_year or file_start[0] > end_year or
-            (file_end[0] == start_year and file_end[1] < start_month) or
-            (file_start[0] == end_year and file_start[1] > end_month)
-        )
-
-    def overlaps_day(file_start, file_end):
-        return not (
-            file_end[0] < start_year or file_start[0] > end_year or
-            (file_end[0] == start_year and (file_end[1], file_end[2]) < (start_month, start_day)) or
-            (file_start[0] == end_year and (file_start[1], file_start[2]) > (end_month, end_day))
-        )
-
-    def parse_filename(file, split_type):
-        if split_type == "year":
-            start_year, end_year = map(int, file.replace('.csv', '').split('-'))
-            return start_year, end_year
-
-        elif split_type == "month":
-            start_part, end_part = file.replace('.csv', '').split('_')
-            start_year, start_month = map(int, start_part.split('-'))
-            end_year, end_month = map(int, end_part.split('-'))
-            return (start_year, start_month), (end_year, end_month)
-
-        elif split_type == "day":
-            start_part, end_part = file.replace('.csv', '').split('_')
-            start_year, start_month, start_day = map(int, start_part.split('-'))
-            end_year, end_month, end_day = map(int, end_part.split('-'))
-            return (start_year, start_month, start_day), (end_year, end_month, end_day)
-
-        else:
-            raise ValueError("Invalid split_type. Must be 'year', 'month', or 'day'")
-
     data_dir = Path(f"data/windows/{split_type}_range_{range_val}/{project_name}")
+    logger.info(f"Loading data from {data_dir}")
+    logger.info(f"Parameters: split_type={split_type}, start_year={start_year}, end_year={end_year}, "
+                f"start_month={start_month}, end_month={end_month}, test={test}")
+    
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
-
-    df_all = pd.DataFrame()
-    file_names = []
-
-    for file in data_dir.glob("*.csv"):
-        file_name = file.name
-        file_start, file_end = parse_filename(file_name, split_type)
-
-        if test:
-            if (split_type == "year" and file_start > end_year) or \
-               (split_type == "month" and (file_start[0] > end_year or (file_start[0] == end_year and file_start[1] > end_month))) or \
-               (split_type == "day" and (file_start[0] > end_year or (file_start[0] == end_year and (file_start[1] > end_month or (file_start[1] == end_month and file_start[2] > end_day))))):
-                df = pd.read_csv(file)
-                df['file_name'] = file_name
-                df_all = pd.concat([df_all, df], ignore_index=True)
-                file_names.append(file_name)
-        else:
-            if (split_type == "year" and overlaps_year(file_start, file_end)) or \
-               (split_type == "month" and overlaps_month(file_start, file_end)) or \
-               (split_type == "day" and overlaps_day(file_start, file_end)):
-                df = pd.read_csv(file)
-                df['file_name'] = file_name
-                df_all = pd.concat([df_all, df], ignore_index=True)
-                file_names.append(file_name)
-
-    if df_all.empty:
-        raise ValueError(f"No data found for the specified range in {data_dir}")
-
+    
+    loader = DataLoader(data_dir)
+    
+    target = TimeWindow(
+        start_year=start_year,
+        end_year=end_year,
+        start_month=start_month,
+        end_month=end_month,
+        start_day=start_day,
+        end_day=end_day
+    )
+    
+    logger.info(f"Searching for data in time window: {target}")
+    if exact_date:
+        matching_files = loader._get_files_in_range(target, split_type, test)
+    else:
+        matching_files = loader._get_files_after_range(target, split_type, test)
+    
+    if not matching_files:
+        logger.error(f"No matching files found for window {target}")
+        # List all files in directory for debugging
+        all_files = list(data_dir.glob("*.csv"))
+        logger.error(f"Available files in directory: {[f.name for f in all_files]}")
+        raise ValueError(f"No data files found for the specified range in {data_dir}")
+    
+    dfs = []
+    for filename in matching_files:
+        logger.info(f"Loading file: {filename}")
+        df = pd.read_csv(data_dir / filename)
+        df['file_name'] = filename
+        dfs.append(df)
+    
+    df_all = pd.concat(dfs, ignore_index=True)
+    logger.info(f"Loaded {len(df_all)} total rows from {len(matching_files)} files")
+    
     df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce', format='%Y-%m-%dT%H:%M:%S.%f+0000')
     if label_mapper.label_to_id:
         df_all = df_all[df_all['label'].isin(label_mapper.label_to_id.keys())]
     df_all['text'] = df_all['title'] + " " + df_all['body']
-
-    # Ensure labels are properly mapped to integers
     df_all['labels'] = label_mapper.map_labels(df_all['label']).astype(int)
-
-    # Add validation check
+    
     if df_all['labels'].isna().any():
         raise ValueError("Some labels could not be mapped to integers")
+    
     return df_all
 
 def train_model(df_train_val, results_path, model_save_path, config, label_mapper, use_validation=True, split_size=0.3):
