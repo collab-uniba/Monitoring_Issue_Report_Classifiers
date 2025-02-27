@@ -45,6 +45,37 @@ def calculate_average_similarity(train_embeddings, test_embeddings, batch_size=1
     
     return total_similarity / total_comparisons
 
+def calculate_similarity_distribution(train_embeddings, test_embeddings, batch_size=1000):
+    """
+    Calculate distribution metrics (percentiles) of cosine similarity.
+    Returns a dictionary with percentiles.
+    """
+    all_similarities = []
+
+    if not isinstance(train_embeddings, torch.Tensor):
+        train_embeddings = torch.tensor(train_embeddings)
+    if not isinstance(test_embeddings, torch.Tensor):
+        test_embeddings = torch.tensor(test_embeddings)
+
+    for i in range(0, len(test_embeddings), batch_size):
+        test_batch = test_embeddings[i:i + batch_size]
+        similarities = util.pytorch_cos_sim(test_batch, train_embeddings)
+        # For each test embedding, get the max similarity to any training embedding
+        max_similarities, _ = torch.max(similarities, dim=1)
+        all_similarities.extend(max_similarities.cpu().numpy())
+
+    return {
+        'mean': np.mean(all_similarities),
+        'std': np.std(all_similarities),
+        'min': np.min(all_similarities),
+        'p10': np.percentile(all_similarities, 10),
+        'p25': np.percentile(all_similarities, 25),
+        'median': np.percentile(all_similarities, 50),
+        'p75': np.percentile(all_similarities, 75),
+        'p90': np.percentile(all_similarities, 90),
+        'max': np.max(all_similarities),
+    }
+
 def compute_embeddings(texts, model, batch_size=32):
     """
     Compute embeddings for a list of texts using batching.
@@ -113,7 +144,7 @@ def get_test_periods(data_dir, split_type, end_cutoff):
     
     return sorted(test_periods)
 
-def analyze_similarity(config_file):
+def analyze_similarity(config_file, include_distribution=False):
     with open(config_file, 'r') as file:
         config = yaml.safe_load(file)
 
@@ -121,6 +152,7 @@ def analyze_similarity(config_file):
     logger.info("Analysis Configuration:")
     logger.info(f"Project: {config['project_name']}")
     logger.info(f"Split type: {config['split_type']}")
+    logger.info(f"Including distribution metrics: {include_distribution}")
     logger.info("Training period:")
     logger.info(f"  Start: Year {config['start_year']}" + 
                 (f", Month {config['start_month']}" if 'start_month' in config else "") +
@@ -162,7 +194,6 @@ def analyze_similarity(config_file):
     )
 
     # Ensure text column exists
-    
     train_df['text'] = train_df.apply(
         lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}".strip(),
         axis=1
@@ -247,46 +278,86 @@ def analyze_similarity(config_file):
             logger.info(f"Computing embeddings for test period {period_str}...")
             test_embeddings = compute_embeddings(test_df['text'].tolist(), model).to(device)
 
-            logger.info(f"Calculating similarity for test period {period_str}...")
-            avg_similarity = calculate_average_similarity(train_embeddings, test_embeddings)
-
-            similarity_results.append({
+            # Initialize result dictionary
+            result = {
                 'period': period_str,
-                'similarity': avg_similarity,
                 'num_samples': len(test_df)
-            })
+            }
+            
+            # Always calculate average cosine similarity
+            logger.info(f"Calculating average cosine similarity for test period {period_str}...")
+            result['similarity'] = calculate_average_similarity(train_embeddings, test_embeddings)
+            
+            # Optionally calculate distribution metrics
+            if include_distribution:
+                logger.info(f"Calculating similarity distribution for test period {period_str}...")
+                dist_metrics = calculate_similarity_distribution(train_embeddings, test_embeddings)
+                for k, v in dist_metrics.items():
+                    result[f'dist_{k}'] = v
+            
+            similarity_results.append(result)
 
             if torch.cuda.is_available():
                 del test_embeddings
                 torch.cuda.empty_cache()
 
-        # Create DataFrame
-        results_df = pd.DataFrame(similarity_results)
-        results_df.to_csv(similarity_path / "similarity_scores.csv", index=False)
+    # Create DataFrame
+    results_df = pd.DataFrame(similarity_results)
+    results_df.to_csv(similarity_path / "similarity_scores.csv", index=False)
 
-        # Plot
-        plt.figure(figsize=(10, 6))
-        plt.plot(results_df['period'], results_df['similarity'], marker='o')
-        plt.title(f"Average Similarity Over Time\n{config['project_name']} - {config['split_type']} split")
-        plt.xlabel(config['split_type'].capitalize())
-        plt.ylabel("Average Cosine Similarity")
-
-        # Set x-ticks every 12 periods
+    # Plot average similarity
+    plt.figure(figsize=(10, 6))
+    plt.plot(results_df['period'], results_df['similarity'], marker='o')
+    plt.title(f"Average Cosine Similarity Over Time\n{config['project_name']} - {config['split_type']} split")
+    plt.xlabel(config['split_type'].capitalize())
+    plt.ylabel("Average Cosine Similarity")
+    
+    # Set x-ticks appropriately
+    if len(results_df) > 20:
         if config['split_type'] == "month":
             plt.xticks(results_df['period'][::12], rotation=45)
         elif config['split_type'] == "day":
-            plt.xticks(results_df['period'][::365], rotation=45)
+            plt.xticks(results_df['period'][::30], rotation=45)
+        else:
+            plt.xticks(rotation=45)
+    else:
+        plt.xticks(rotation=45)
+        
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(similarity_path / "cosine_similarity_trend.png")
+    plt.close()
 
-        plt.grid(True)
-        plt.tight_layout()
+    # Plot distribution metrics if requested
+    if include_distribution:
+        dist_cols = [col for col in results_df.columns if col.startswith('dist_') and col != 'dist_std']
+        if dist_cols:
+            plt.figure(figsize=(12, 8))
+            for col in dist_cols:
+                plt.plot(results_df['period'], results_df[col], marker='o', label=col.replace('dist_', ''))
+            
+            plt.title(f"Similarity Distribution Metrics\n{config['project_name']} - {config['split_type']} split")
+            plt.xlabel(config['split_type'].capitalize())
+            plt.ylabel("Similarity Score")
+            plt.legend()
+            
+            if len(results_df) > 20:
+                if config['split_type'] == "month":
+                    plt.xticks(results_df['period'][::12], rotation=45)
+                elif config['split_type'] == "day":
+                    plt.xticks(results_df['period'][::30], rotation=45)
+                else:
+                    plt.xticks(rotation=45)
+            else:
+                plt.xticks(rotation=45)
+                
+            plt.grid(True)
+            plt.tight_layout()
+            plt.savefig(similarity_path / "similarity_distribution.png")
+            plt.close()
 
-        # Save figure
-        plt.savefig(similarity_path / "similarity_trend.png")
-        logger.info(f"Results saved to {similarity_path}")
-
-        # Save similarity results in a CSV file
-        results_df.to_csv(similarity_path / "similarity_scores.csv", index=False)
-        logger.info(f"Similarity results saved to {similarity_path / 'similarity_scores.csv'}")
+    logger.info(f"Results saved to {similarity_path}")
+    logger.info(f"Similarity results saved to {similarity_path / 'similarity_scores.csv'}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze similarity between train and test sets.")
@@ -296,6 +367,11 @@ if __name__ == "__main__":
         required=True,
         help="Path to the YAML configuration file."
     )
+    parser.add_argument(
+        "--include-distribution",
+        action="store_true",
+        help="Include similarity distribution metrics in addition to average similarity."
+    )
     args = parser.parse_args()
     
-    analyze_similarity(args.config)
+    analyze_similarity(args.config, args.include_distribution)
