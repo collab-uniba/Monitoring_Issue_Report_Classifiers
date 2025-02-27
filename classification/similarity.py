@@ -284,6 +284,10 @@ def analyze_similarity(config_file):
         plt.savefig(similarity_path / "similarity_trend.png")
         logger.info(f"Results saved to {similarity_path}")
 
+        # Save similarity results in a CSV file
+        results_df.to_csv(similarity_path / "similarity_scores.csv", index=False)
+        logger.info(f"Similarity results saved to {similarity_path / 'similarity_scores.csv'}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze similarity between train and test sets.")
     parser.add_argument(
