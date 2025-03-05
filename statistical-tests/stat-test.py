@@ -90,7 +90,7 @@ def calculate_deltas(df, column):
     
     return deltas
 
-def perform_statistical_tests(config_file, use_deltas=False, normalize=False):
+def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mode='mean'):
     """
     Perform comprehensive statistical tests with optional delta and normalization analysis.
     
@@ -111,7 +111,7 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False):
     )
     
     # Load similarity scores
-    similarity_scores_path = results_path / "similarity_analysis" / "similarity_scores.csv"
+    similarity_scores_path = results_path / "similarity_analysis" / f"similarity_scores_{mode}.csv"
     similarity_df = pd.read_csv(similarity_scores_path)
     
     # Load classification results
@@ -280,9 +280,16 @@ def main():
         action="store_true",
         help="Perform min-max normalization before statistical tests"
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="mean",
+        choices=["mean", "max"],
+        help="Mode of aggregation for similarity scores"
+    )
     args = parser.parse_args()
     
-    perform_statistical_tests(args.config, args.use_deltas, args.normalize)
+    perform_statistical_tests(args.config, args.use_deltas, args.normalize, args.mode)
 
 if __name__ == "__main__":
     main()
