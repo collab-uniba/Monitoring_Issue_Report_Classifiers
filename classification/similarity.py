@@ -24,9 +24,10 @@ def preprocess_text(text):
     """
     return "" if pd.isna(text) or text is None else str(text).strip()
 
-def calculate_average_similarity(train_embeddings, test_embeddings, batch_size=1000):
+def calculate_average_similarity(train_embeddings, test_embeddings, mode="mean", batch_size=1000):
     """
-    Calculate average cosine similarity between two sets of embeddings using batching.
+    Calculate average or max cosine similarity between two sets of embeddings using batching.
+    The mode can be 'max' (default) or 'mean'.
     """
     total_similarity = 0
     total_comparisons = 0
@@ -39,16 +40,24 @@ def calculate_average_similarity(train_embeddings, test_embeddings, batch_size=1
     for i in range(0, len(test_embeddings), batch_size):
         test_batch = test_embeddings[i:i + batch_size]
         similarities = util.pytorch_cos_sim(test_batch, train_embeddings)
-        batch_avg = torch.mean(similarities, dim=1)
-        total_similarity += torch.sum(batch_avg).item()
+        
+        if mode == "max":
+            batch_similarity, _ = torch.max(similarities, dim=1)
+        elif mode == "mean":
+            batch_similarity = torch.mean(similarities, dim=1)
+        else:
+            raise ValueError("Invalid mode. Choose 'max' or 'mean'.")
+
+        total_similarity += torch.sum(batch_similarity).item()
         total_comparisons += len(test_batch)
     
     return total_similarity / total_comparisons
 
-def calculate_similarity_distribution(train_embeddings, test_embeddings, batch_size=1000):
+
+def calculate_similarity_distribution(train_embeddings, test_embeddings, mode="max", batch_size=1000):
     """
     Calculate distribution metrics (percentiles) of cosine similarity.
-    Returns a dictionary with percentiles.
+    The mode can be 'max' (default) or 'mean'.
     """
     all_similarities = []
 
@@ -60,9 +69,15 @@ def calculate_similarity_distribution(train_embeddings, test_embeddings, batch_s
     for i in range(0, len(test_embeddings), batch_size):
         test_batch = test_embeddings[i:i + batch_size]
         similarities = util.pytorch_cos_sim(test_batch, train_embeddings)
-        # For each test embedding, get the max similarity to any training embedding
-        max_similarities, _ = torch.max(similarities, dim=1)
-        all_similarities.extend(max_similarities.cpu().numpy())
+
+        if mode == "max":
+            selected_similarities, _ = torch.max(similarities, dim=1)
+        elif mode == "mean":
+            selected_similarities = torch.mean(similarities, dim=1)
+        else:
+            raise ValueError("Invalid mode. Choose 'max' or 'mean'.")
+
+        all_similarities.extend(selected_similarities.cpu().numpy())
 
     return {
         'mean': np.mean(all_similarities),
@@ -144,7 +159,7 @@ def get_test_periods(data_dir, split_type, end_cutoff):
     
     return sorted(test_periods)
 
-def analyze_similarity(config_file, include_distribution=False):
+def analyze_similarity(config_file, include_distribution=False, mode="max"):
     with open(config_file, 'r') as file:
         config = yaml.safe_load(file)
 
@@ -283,18 +298,18 @@ def analyze_similarity(config_file, include_distribution=False):
                 'period': period_str,
                 'num_samples': len(test_df)
             }
-            
+
             # Always calculate average cosine similarity
             logger.info(f"Calculating average cosine similarity for test period {period_str}...")
-            result['similarity'] = calculate_average_similarity(train_embeddings, test_embeddings)
-            
+            result['similarity'] = calculate_average_similarity(train_embeddings, test_embeddings, mode=mode)
+
             # Optionally calculate distribution metrics
             if include_distribution:
                 logger.info(f"Calculating similarity distribution for test period {period_str}...")
-                dist_metrics = calculate_similarity_distribution(train_embeddings, test_embeddings)
+                dist_metrics = calculate_similarity_distribution(train_embeddings, test_embeddings, mode=mode)
                 for k, v in dist_metrics.items():
                     result[f'dist_{k}'] = v
-            
+
             similarity_results.append(result)
 
             if torch.cuda.is_available():
@@ -303,7 +318,7 @@ def analyze_similarity(config_file, include_distribution=False):
 
     # Create DataFrame
     results_df = pd.DataFrame(similarity_results)
-    results_df.to_csv(similarity_path / "similarity_scores.csv", index=False)
+    results_df.to_csv(similarity_path / f"similarity_scores_{mode}.csv", index=False)
 
     # Plot average similarity
     plt.figure(figsize=(10, 6))
@@ -311,7 +326,7 @@ def analyze_similarity(config_file, include_distribution=False):
     plt.title(f"Average Cosine Similarity Over Time\n{config['project_name']} - {config['split_type']} split")
     plt.xlabel(config['split_type'].capitalize())
     plt.ylabel("Average Cosine Similarity")
-    
+
     # Set x-ticks appropriately
     if len(results_df) > 20:
         if config['split_type'] == "month":
@@ -322,25 +337,28 @@ def analyze_similarity(config_file, include_distribution=False):
             plt.xticks(rotation=45)
     else:
         plt.xticks(rotation=45)
-        
+
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(similarity_path / "cosine_similarity_trend.png")
+    plt.savefig(similarity_path / f"cosine_similarity_trend_{mode}.png")
     plt.close()
 
     # Plot distribution metrics if requested
     if include_distribution:
-        dist_cols = [col for col in results_df.columns if col.startswith('dist_') and col != 'dist_std']
-        if dist_cols:
+        if dist_cols := [
+            col
+            for col in results_df.columns
+            if col.startswith('dist_') and col != 'dist_std'
+        ]:
             plt.figure(figsize=(12, 8))
             for col in dist_cols:
                 plt.plot(results_df['period'], results_df[col], marker='o', label=col.replace('dist_', ''))
-            
+
             plt.title(f"Similarity Distribution Metrics\n{config['project_name']} - {config['split_type']} split")
             plt.xlabel(config['split_type'].capitalize())
             plt.ylabel("Similarity Score")
             plt.legend()
-            
+
             if len(results_df) > 20:
                 if config['split_type'] == "month":
                     plt.xticks(results_df['period'][::12], rotation=45)
@@ -350,14 +368,14 @@ def analyze_similarity(config_file, include_distribution=False):
                     plt.xticks(rotation=45)
             else:
                 plt.xticks(rotation=45)
-                
+
             plt.grid(True)
             plt.tight_layout()
-            plt.savefig(similarity_path / "similarity_distribution.png")
+            plt.savefig(similarity_path / f"similarity_distribution_{mode}.png")
             plt.close()
 
     logger.info(f"Results saved to {similarity_path}")
-    logger.info(f"Similarity results saved to {similarity_path / 'similarity_scores.csv'}")
+    logger.info(f"Similarity results saved to {similarity_path / 'similarity_scores_{mode}.csv'}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze similarity between train and test sets.")
@@ -372,6 +390,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Include similarity distribution metrics in addition to average similarity."
     )
+    parser.add_argument(
+        "--mode",
+        choices=["max", "mean"],
+        default="max",
+        help="Select whether to use max or mean similarity."
+    )
     args = parser.parse_args()
     
-    analyze_similarity(args.config, args.include_distribution)
+    analyze_similarity(args.config, args.include_distribution, args.mode)
