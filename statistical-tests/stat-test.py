@@ -6,9 +6,11 @@ import numpy as np
 import logging
 from pathlib import Path
 from scipy import stats
+from scipy.spatial.distance import euclidean
+from fastdtw import fastdtw
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -193,7 +195,7 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
         'f1_macro': f1_normality
     }
     
-    with open(stat_tests_path / "normality_results.yaml", 'w') as f:
+    with open(stat_tests_path / f"normality_results_{mode}.yaml", 'w') as f:
         yaml.dump(normality_results, f)
     
     # Determine appropriate correlation test based on normality
@@ -218,7 +220,7 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
         'sample_size': len(merged_df)
     }
     
-    with open(stat_tests_path / "correlation_results.yaml", 'w') as f:
+    with open(stat_tests_path / f"correlation_results_{mode}.yaml", 'w') as f:
         yaml.dump(correlation_results, f)
     
     # Visualization
@@ -249,7 +251,7 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     if normalize:
         filename_components.append('normalized')
     
-    plt.savefig(stat_tests_path / f"{'_'.join(filename_components)}.png")
+    plt.savefig(stat_tests_path / f"{'_'.join(filename_components)}_{mode}.png")
     plt.close()
     
     # Log comprehensive results
@@ -261,6 +263,126 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     logger.info(f"Correlation Coefficient: {correlation_coef:.4f}")
     logger.info(f"p-value: {p_value:.4f}")
     logger.info(f"Results saved to {stat_tests_path}")
+
+        # Normalization and DTW Analysis
+    def perform_dtw_analysis(similarity_series, f1_series):
+        """
+        Perform Dynamic Time Warping analysis with multiple normalization approaches
+        """
+        # Ensure series are numpy arrays
+        similarity_series = np.array(similarity_series)
+        f1_series = np.array(f1_series)
+        
+        # Normalization methods
+        normalization_results = {}
+        
+        # 1. Min-Max Normalization
+        minmax_scaler = MinMaxScaler()
+        similarity_minmax = minmax_scaler.fit_transform(similarity_series.reshape(-1, 1)).flatten()
+        f1_minmax = minmax_scaler.fit_transform(f1_series.reshape(-1, 1)).flatten()
+        
+        # 2. Z-score Standardization
+        zscore_scaler = StandardScaler()
+        similarity_zscore = zscore_scaler.fit_transform(similarity_series.reshape(-1, 1)).flatten()
+        f1_zscore = zscore_scaler.fit_transform(f1_series.reshape(-1, 1)).flatten()
+        
+        # Perform DTW for both normalization methods
+        # Min-Max Normalized DTW
+        distance_minmax, path_minmax = fastdtw(similarity_minmax, f1_minmax, dist=euclidean)
+        normalization_results['minmax'] = {
+            'distance': distance_minmax,
+            'path': path_minmax,
+            'similarity_normalized': similarity_minmax.tolist(),
+            'f1_normalized': f1_minmax.tolist()
+        }
+        
+        # Z-score Normalized DTW
+        distance_zscore, path_zscore = fastdtw(similarity_zscore, f1_zscore, dist=euclidean)
+        normalization_results['zscore'] = {
+            'distance': distance_zscore,
+            'path': path_zscore,
+            'similarity_normalized': similarity_zscore.tolist(),
+            'f1_normalized': f1_zscore.tolist()
+        }
+        
+        return normalization_results
+    
+    # Perform analysis
+    # Choose column for analysis
+    if use_deltas:
+        similarity_column = 'similarity_delta'
+        f1_column = 'f1_macro_delta'
+        delta_suffix = " (Deltas)"
+    else:
+        similarity_column = 'similarity'
+        f1_column = 'f1_macro'
+        delta_suffix = ""
+    
+    # Perform DTW analysis
+    dtw_results = perform_dtw_analysis(
+        merged_df[similarity_column], 
+        merged_df[f1_column]
+    )
+    
+    # Create results directory
+    stat_tests_path = results_path / "statistical_tests"
+    os.makedirs(stat_tests_path, exist_ok=True)
+    
+    # Save DTW results
+    with open(stat_tests_path / "fastdtw_results_{mode}.yaml", 'w') as f:
+        yaml.dump(dtw_results, f)
+    
+    # Visualization
+    plt.figure(figsize=(15, 10))
+    
+    # Original and Normalized Series
+    plt.subplot(2, 2, 1)
+    plt.title(f'Original Series{delta_suffix}')
+    plt.plot(merged_df[similarity_column], label='Cosine Similarity')
+    plt.plot(merged_df[f1_column], label='F1 Macro Score')
+    plt.legend()
+    
+    # Min-Max Normalized Series
+    plt.subplot(2, 2, 2)
+    plt.title(f'Min-Max Normalized Series{delta_suffix}')
+    plt.plot(
+        dtw_results['minmax']['similarity_normalized'], 
+        label='Cosine Similarity'
+    )
+    plt.plot(
+        dtw_results['minmax']['f1_normalized'], 
+        label='F1 Macro Score'
+    )
+    plt.legend()
+    
+    # DTW Alignment Path (Min-Max)
+    plt.subplot(2, 2, 3)
+    path_x, path_y = zip(*dtw_results['minmax']['path'])
+    plt.title(f'DTW Alignment Path (Min-Max){delta_suffix}')
+    plt.scatter(path_x, path_y, c='red', alpha=0.5)
+    plt.xlabel('Cosine Similarity Index')
+    plt.ylabel('F1 Macro Score Index')
+    
+    # DTW Metrics Comparison
+    plt.subplot(2, 2, 4)
+    dtw_methods = ['Min-Max', 'Z-Score']
+    dtw_distances = [
+        dtw_results['minmax']['distance'], 
+        dtw_results['zscore']['distance']
+    ]
+    plt.bar(dtw_methods, dtw_distances)
+    plt.title('DTW Distances')
+    plt.ylabel('Distance')
+    
+    plt.tight_layout()
+    plt.savefig(stat_tests_path / f"fastdtw_analysis_{mode}.png")
+    plt.close()
+    
+    # Log DTW results
+    logger.info("FastDTW Analysis Results:")
+    logger.info(f"DTW Distance (Min-Max): {dtw_results['minmax']['distance']:.4f}")
+    logger.info(f"DTW Distance (Z-Score): {dtw_results['zscore']['distance']:.4f}")
+        
 
 def main():
     parser = argparse.ArgumentParser(description="Perform statistical tests on model performance and similarity.")
@@ -289,7 +411,12 @@ def main():
     )
     args = parser.parse_args()
     
-    perform_statistical_tests(args.config, args.use_deltas, args.normalize, args.mode)
+    perform_statistical_tests(
+        args.config,
+        args.use_deltas,
+        args.normalize,
+        args.mode
+    )
 
 if __name__ == "__main__":
     main()
