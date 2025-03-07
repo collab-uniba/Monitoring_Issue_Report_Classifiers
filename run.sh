@@ -43,7 +43,7 @@ case "$mode" in
     stat-test)
         for config in "${configs[@]}"; do
             echo "Running $mode with $config..."
-            python "statistsical-tests/stat_tests.py" --config "$default_config_dir/$config --normalize"
+            python "statistsical-tests/stat_test.py" --config "$default_config_dir/$config --normalize"
             if [ $? -ne 0 ]; then
                 echo "Error encountered while running $config. Exiting."
                 exit 1
