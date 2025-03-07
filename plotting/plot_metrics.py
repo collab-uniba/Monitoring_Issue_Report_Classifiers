@@ -15,21 +15,21 @@ def extract_date_info(filename):
     # First, remove the .csv extension if present
     if filename.endswith('.csv'):
         filename = filename[:-4]
-        
+
     # Pattern 1: YYYY-YYYY
     pattern1 = r'^(\d{4})-(\d{4})$'
     match = re.match(pattern1, filename)
     if match:
         start_year, end_year = int(match.group(1)), int(match.group(2))
         return (start_year, 1, 1, end_year, 12, 31)  # Assume full years
-        
+
     # Pattern 2: YYYY-MM_YYYY-MM (handle format like 2000-1_2000-1)
     pattern2 = r'^(\d{4})-(\d{1,2})_(\d{4})-(\d{1,2})$'
     match = re.match(pattern2, filename)
     if match:
         start_year, start_month, end_year, end_month = map(int, match.groups())
         return (start_year, start_month, 1, end_year, end_month, None)
-        
+
     # Pattern 3: YYYY_MM-YYYY_MM
     pattern3 = r'^(\d{4})_(\d{2})-(\d{4})_(\d{2})$'
     match = re.match(pattern3, filename)
@@ -42,7 +42,7 @@ def extract_date_info(filename):
     match = re.match(pattern4, filename)
     if match:
         return tuple(map(int, match.groups()))
-        
+
     # Debug output
     print(f"Failed to parse date from filename: {filename}")
     return None
@@ -58,15 +58,15 @@ def calculate_date_value(date_info):
         return None
 
     start_year, start_month, start_day, end_year, end_month, end_day = date_info
-    
+
     # If it's the same year and month, return that point exactly
     if start_year == end_year and start_month == end_month:
         return float(start_year) + (start_month - 1) / 12.0
-    
+
     # If it's the same year with full-year range, return that year exactly
     if start_year == end_year and start_month == 1 and end_month == 12:
         return float(start_year)
-    
+
     # Handle missing day values
     if start_day is None:
         start_day = 1
@@ -129,7 +129,7 @@ def parse_yaml_and_plot(yaml_file, debug=False):
         for filename, file_info in data.items():
             if debug:
                 print(f"Processing file: {filename}")
-                
+
             # Skip any entries that don't look like data
             if not isinstance(file_info, dict):
                 print(f"Skipping {filename} - not a dictionary")
@@ -139,7 +139,7 @@ def parse_yaml_and_plot(yaml_file, debug=False):
             if 'macro avg' in file_info and isinstance(file_info['macro avg'], dict):
                 if 'f1-score' in file_info['macro avg']:
                     f1_score = file_info['macro avg']['f1-score']
-                    
+
                     # Extract date info from the filename
                     date_info = extract_date_info(filename)
                     if debug:
