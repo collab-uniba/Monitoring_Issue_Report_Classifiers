@@ -12,3 +12,4 @@ pymongo
 pytz
 pyYAML
 fastdtw
+seaborn
