@@ -105,12 +105,41 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
         config = yaml.safe_load(file)
     
     # Generate paths
-    results_path = Path(config['results_root']) / (
-        f"{config['split_type']}_range_{config['range']}/"
-        f"{config['start_year']}-{config.get('start_month', 'all')}_"
-        f"{config['end_year']}-{config.get('end_month', 'all')}/"
-        f"{config['project_name']}"
-    )
+    results_path = Path(config['results_root'])
+
+    # Build the path differently based on split_type
+    if config['split_type'] == 'year':
+        # For year splits, only include years in the path
+        results_path = results_path / (
+            f"{config['split_type']}_range_{config['range']}/"
+            f"{config['start_year']}_{config['end_year']}/"
+            f"{config['project_name']}"
+        )
+    elif config['split_type'] == 'month':
+        # For month splits, include year and month
+        results_path = results_path / (
+            f"{config['split_type']}_range_{config['range']}/"
+            f"{config['start_year']}-{config.get('start_month', 'all')}_"
+            f"{config['end_year']}-{config.get('end_month', 'all')}/"
+            f"{config['project_name']}"
+        )
+    elif config['split_type'] == 'day':
+        # For day splits, include year, month, and day
+        results_path = results_path / (
+            f"{config['split_type']}_range_{config['range']}/"
+            f"{config['start_year']}-{config.get('start_month', 'all')}-{config.get('start_day', 'all')}_"
+            f"{config['end_year']}-{config.get('end_month', 'all')}-{config.get('end_day', 'all')}/"
+            f"{config['project_name']}"
+        )
+    else:
+        # Fallback for any other split type
+        logger.warning(f"Unknown split_type: {config['split_type']}. Using generic path format.")
+        results_path = results_path / (
+            f"{config['split_type']}_range_{config['range']}/"
+            f"{config['start_year']}-{config.get('start_month', 'all')}_"
+            f"{config['end_year']}-{config.get('end_month', 'all')}/"
+            f"{config['project_name']}"
+        )
     
     # Load similarity scores
     similarity_scores_path = results_path / "similarity_analysis" / f"similarity_scores_{mode}.csv"
