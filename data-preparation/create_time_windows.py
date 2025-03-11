@@ -51,7 +51,7 @@ class TimeWindowCreator:
         
         # Convert back to human-readable format
         if self.split_type == 'year':
-            return f"{start_period}-{end_period}"
+            return f"{start_period}_{end_period}"
         elif self.split_type == 'month':
             start_year, start_month = divmod(start_period, 12)
             end_year, end_month = divmod(end_period, 12)
