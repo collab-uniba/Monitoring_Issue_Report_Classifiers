@@ -179,6 +179,12 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     performance_df = pd.DataFrame(performance_metrics)
 
     performance_df['period'] = performance_df['period'].astype(str)
+
+    # Convert performance_df to match similarity_df
+    # This means that if in period we have start and end date that match, we should only keep the end date
+
+    if config['range'] == 1:
+        performance_df['period'] = performance_df['period'].str.split('_').str[1]
     
     # Merge DataFrames
     merged_df = pd.merge(similarity_df, performance_df, on='period', how='inner')
