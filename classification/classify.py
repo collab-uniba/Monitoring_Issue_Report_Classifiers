@@ -256,7 +256,7 @@ def generate_results_path(root_path, split_type, range_val, project_name, start_
                          start_month=None, end_month=None, start_day=None, end_day=None):
     path = Path(root_path) / f"{split_type}_range_{range_val}"
     if split_type == "year":
-        path /= f"{start_year}-{end_year}"
+        path /= f"{start_year}_{end_year}"
     elif split_type == "month":
         path /= f"{start_year}-{start_month}_{end_year}-{end_month}"
     elif split_type == "day":
