@@ -144,6 +144,8 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     # Load similarity scores
     similarity_scores_path = results_path / "similarity_analysis" / f"similarity_scores_{mode}.csv"
     similarity_df = pd.read_csv(similarity_scores_path)
+
+    similarity_df['period'] = similarity_df['period'].astype(str)
     
     # Load classification results
     try:
@@ -175,6 +177,8 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     
     # Convert to DataFrame
     performance_df = pd.DataFrame(performance_metrics)
+
+    performance_df['period'] = performance_df['period'].astype(str)
     
     # Merge DataFrames
     merged_df = pd.merge(similarity_df, performance_df, on='period', how='inner')
