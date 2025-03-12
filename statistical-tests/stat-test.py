@@ -12,6 +12,28 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
+# Custom YAML representer for numpy types
+def numpy_representer(dumper, data):
+    """Custom representer for numpy scalars to convert to Python native types"""
+    if isinstance(data, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64,
+                         np.uint8, np.uint16, np.uint32, np.uint64)):
+        return dumper.represent_int(int(data))
+    elif isinstance(data, (np.float_, np.float16, np.float32, np.float64)):
+        return dumper.represent_float(float(data))
+    elif isinstance(data, (np.ndarray,)):
+        return dumper.represent_list(data.tolist())
+    elif isinstance(data, np.bool_):
+        return dumper.represent_bool(bool(data))
+    return dumper.represent_scalar('tag:yaml.org,2002:str', str(data))
+
+# Add custom representer to PyYAML
+yaml.add_representer(np.ndarray, numpy_representer)
+yaml.add_representer(np.float64, numpy_representer)
+yaml.add_representer(np.float32, numpy_representer)
+yaml.add_representer(np.int64, numpy_representer)
+yaml.add_representer(np.int32, numpy_representer)
+yaml.add_representer(np.bool_, numpy_representer)
+
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -35,7 +57,7 @@ def load_classification_results(results_path):
         logger.error(f"Classification results not found in {results_path}")
         raise
 
-def check_normality(data, variable_name, alpha=0.05):
+def check_normality(data, variable_name, output_dir, alpha=0.05):
     """
     Perform normality tests and create Q-Q plot.
     Returns a dictionary of normality test results.
@@ -64,17 +86,17 @@ def check_normality(data, variable_name, alpha=0.05):
     plt.title(f"Histogram of {variable_name}")
     
     plt.tight_layout()
-    plt.savefig(f"{variable_name.lower().replace(' ', '_')}_normality.png")
+    plt.savefig(f"{output_dir}/{variable_name.lower().replace(' ', '_')}_normality.png")  
     plt.close()
     
     # Interpret results
     normality_results = {
-        'shapiro_statistic': shapiro_stat,
-        'shapiro_p_value': shapiro_p,
-        'anderson_statistic': anderson_result.statistic,
-        'anderson_critical_values': anderson_result.critical_values,
-        'anderson_significance_levels': anderson_result.significance_level,
-        'is_normal': shapiro_p > alpha
+        'shapiro_statistic': float(shapiro_stat),
+        'shapiro_p_value': float(shapiro_p),
+        'anderson_statistic': float(anderson_result.statistic),
+        'anderson_critical_values': anderson_result.critical_values.tolist(),
+        'anderson_significance_levels': anderson_result.significance_level.tolist(),
+        'is_normal': bool(shapiro_p > alpha)
     }
     
     return normality_results
@@ -183,9 +205,9 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     # Convert performance_df to match similarity_df
     # This means that if in period we have start and end date that match, we should only keep the end date
 
-    if config['range'] == 1:
+    if int(config['range']) == 1:
         performance_df['period'] = performance_df['period'].str.split('_').str[1]
-    
+
     # Merge DataFrames
     merged_df = pd.merge(similarity_df, performance_df, on='period', how='inner')
     
@@ -210,7 +232,7 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
         f1_column = 'f1_macro'
         plot_title_suffix = ""
         test_title_suffix = ""
-    
+
     # Optional Normalization
     if normalize:
         # Min-Max Normalization
@@ -225,8 +247,8 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
         test_title_suffix += " (Normalized)"
     
     # Perform normality tests
-    similarity_normality = check_normality(merged_df[similarity_column], f"Cosine Similarity{plot_title_suffix}")
-    f1_normality = check_normality(merged_df[f1_column], f"F1 Macro Score{plot_title_suffix}")
+    similarity_normality = check_normality(merged_df[similarity_column], f"Cosine Similarity{plot_title_suffix}", stat_tests_path)
+    f1_normality = check_normality(merged_df[f1_column], f"F1 Macro Score{plot_title_suffix}", stat_tests_path)
     
     # Save normality test results
     normality_results = {
@@ -235,7 +257,7 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     }
     
     with open(stat_tests_path / f"normality_results_{mode}.yaml", 'w') as f:
-        yaml.dump(normality_results, f)
+        yaml.dump(normality_results, f, default_flow_style=False)
     
     # Determine appropriate correlation test based on normality
     correlation_method = "Pearson" if similarity_normality['is_normal'] and f1_normality['is_normal'] else "Spearman"
@@ -254,13 +276,13 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     # Save correlation results
     correlation_results = {
         'test_method': correlation_method,
-        'correlation_coefficient': correlation_coef,
-        'p_value': p_value,
+        'correlation_coefficient': float(correlation_coef),
+        'p_value': float(p_value),
         'sample_size': len(merged_df)
     }
-    
+
     with open(stat_tests_path / f"correlation_results_{mode}.yaml", 'w') as f:
-        yaml.dump(correlation_results, f)
+        yaml.dump(correlation_results, f, default_flow_style=False)
     
     # Visualization
     plt.figure(figsize=(10, 6))
@@ -325,6 +347,10 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
         similarity_zscore = zscore_scaler.fit_transform(similarity_series.reshape(-1, 1)).flatten()
         f1_zscore = zscore_scaler.fit_transform(f1_series.reshape(-1, 1)).flatten()
         
+        # Convert to the correct format for fastdtw (sequences of 1D points)
+        similarity_minmax = np.array([[x] for x in similarity_minmax])
+        f1_minmax = np.array([[x] for x in f1_minmax])
+        
         # Perform DTW for both normalization methods
         # Min-Max Normalized DTW
         distance_minmax, path_minmax = fastdtw(similarity_minmax, f1_minmax, dist=euclidean)
@@ -335,6 +361,9 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
             'f1_normalized': f1_minmax.tolist()
         }
         
+        similarity_zscore = np.array([[x] for x in similarity_zscore])
+        f1_zscore = np.array([[x] for x in f1_zscore])
+
         # Z-score Normalized DTW
         distance_zscore, path_zscore = fastdtw(similarity_zscore, f1_zscore, dist=euclidean)
         normalization_results['zscore'] = {
@@ -368,7 +397,7 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     os.makedirs(stat_tests_path, exist_ok=True)
     
     # Save DTW results
-    with open(stat_tests_path / "fastdtw_results_{mode}.yaml", 'w') as f:
+    with open(stat_tests_path / f"fastdtw_results_{mode}.yaml", 'w') as f:
         yaml.dump(dtw_results, f)
     
     # Visualization
