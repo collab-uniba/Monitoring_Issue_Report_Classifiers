@@ -1,7 +1,7 @@
 #!/bin/bash
 # Enable error handling
 set -e
-default_config_dir="classification"
+default_config_dir="config"
 # Define available configurations
 declare -a configs=(
     "config-apache-y1.yaml"
