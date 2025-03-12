@@ -10,11 +10,14 @@ tools/outputs*
 # Ignore the .vscode/ directory and its files
 .vscode/
 
-# Ignore the results of the analysis
-*/results/*
+# Ignore the results directory and its files
+results/
 
 # Ignore jira_dataset folder
 jira_dataset/
 
 # Ignore any folder that starts with __pycache__
 __pycache__/
+
+# Ignore the venv/ directory and its files
+venv/
