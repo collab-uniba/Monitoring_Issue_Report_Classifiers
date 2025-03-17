@@ -406,22 +406,40 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     # Original and Normalized Series
     plt.subplot(2, 2, 1)
     plt.title(f'Original Series{delta_suffix}')
-    plt.plot(merged_df[similarity_column], label='Cosine Similarity')
-    plt.plot(merged_df[f1_column], label='F1 Macro Score')
-    plt.legend()
+    plt.plot(merged_df['period'], merged_df[similarity_column], label='Cosine Similarity')
+    plt.plot(merged_df['period'], merged_df[f1_column], label='F1 Macro Score')
+
+    # Filter x-ticks to show only January of each year (or first month of each year)
+    # Assuming period format is like '2020-01', '2020-02', etc.
+    years = [period.split('-')[0] for period in merged_df['period']]
+    months = [period.split('-')[1] if '-' in period else '01' for period in merged_df['period']]
+    tick_positions = []
+    tick_labels = []
+    current_year = None
+
+    for i, (year, month) in enumerate(zip(years, months)):
+        if year != current_year and month == '01':  # Show only January (or first month in dataset)
+            current_year = year
+            tick_positions.append(i)
+            tick_labels.append(year)
+
+    plt.xticks(tick_positions, tick_labels, rotation=45)
     
-    # Min-Max Normalized Series
     plt.subplot(2, 2, 2)
     plt.title(f'Min-Max Normalized Series{delta_suffix}')
     plt.plot(
-        dtw_results['minmax']['similarity_normalized'], 
+        range(len(merged_df)), 
+        np.array(dtw_results['minmax']['similarity_normalized']).flatten(), 
         label='Cosine Similarity'
     )
     plt.plot(
-        dtw_results['minmax']['f1_normalized'], 
+        range(len(merged_df)),
+        np.array(dtw_results['minmax']['f1_normalized']).flatten(), 
         label='F1 Macro Score'
     )
-    plt.legend()
+
+    # Use the same tick positions and labels as in the first subplot
+    plt.xticks(tick_positions, tick_labels, rotation=45)
     
     # DTW Alignment Path (Min-Max)
     plt.subplot(2, 2, 3)
@@ -450,7 +468,246 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     logger.info("FastDTW Analysis Results:")
     logger.info(f"DTW Distance (Min-Max): {dtw_results['minmax']['distance']:.4f}")
     logger.info(f"DTW Distance (Z-Score): {dtw_results['zscore']['distance']:.4f}")
+
+    
+def perform_yearly_correlation_analysis(config_file, use_deltas=False, normalize=False, mode='mean'):
+    """
+    Perform statistical tests for each year separately when split_type is month.
+    Plot the correlations between F1 and cosine similarity for each year with different colors based on test type.
+    
+    Parameters:
+    - config_file: Path to the configuration YAML file
+    - use_deltas: Whether to analyze changes instead of raw values
+    - normalize: Whether to perform min-max normalization before analysis
+    - mode: Aggregation mode for similarity scores ('mean' or 'max')
+    """
+    with open(config_file, 'r') as file:
+        config = yaml.safe_load(file)
+    
+    # Only proceed if split_type is month
+    if config['split_type'] != 'month':
+        logger.info("Yearly correlation analysis is only applicable for month split_type.")
+        return
+    
+    # Generate paths
+    results_path = Path(config['results_root'])
+    results_path = results_path / (
+        f"{config['split_type']}_range_{config['range']}/"
+        f"{config['start_year']}-{config.get('start_month', 'all')}_"
+        f"{config['end_year']}-{config.get('end_month', 'all')}/"
+        f"{config['project_name']}"
+    )
+    
+    # Load similarity scores
+    similarity_scores_path = results_path / "similarity_analysis" / f"similarity_scores_{mode}.csv"
+    similarity_df = pd.read_csv(similarity_scores_path)
+    similarity_df['period'] = similarity_df['period'].astype(str)
+    
+    # Extract year from period in similarity_df
+    # Handle different period formats: YYYY-MM, YYYY_MM, or YYYY
+    similarity_df['year'] = similarity_df['period'].str.extract(r'(\d{4})').astype(int)
+    
+    # Load classification results
+    try:
+        aggregated_report, file_reports = load_classification_results(results_path)
+    except FileNotFoundError:
+        logger.error("Could not load classification results.")
+        return
+    
+    # Prepare performance metrics
+    performance_metrics = []
+    
+    # Extract F1-scores from file reports
+    if file_reports:
+        for period, report in file_reports.items():
+            period_name = os.path.splitext(period)[0]  # Remove .csv extension
+            f1_macro = report.get('macro avg', {}).get('f1-score', np.nan)
+            performance_metrics.append({
+                'period': period_name,
+                'f1_macro': f1_macro
+            })
+    else:
+        # Fallback to aggregated report
+        f1_macro = aggregated_report.get('macro avg', {}).get('f1-score', np.nan)
+        performance_metrics.append({
+            'period': 'aggregated',
+            'f1_macro': f1_macro
+        })
+    
+    # Convert to DataFrame
+    performance_df = pd.DataFrame(performance_metrics)
+    performance_df['period'] = performance_df['period'].astype(str)
+    
+    # Convert performance_df to match similarity_df
+    if int(config['range']) == 1:
+        # If range is 1, consider converting period formats if needed
+        if '_' in performance_df['period'].iloc[0]:
+            performance_df['period'] = performance_df['period'].str.split('_').str[1]
+    
+    # Merge DataFrames
+    merged_df = pd.merge(similarity_df, performance_df, on='period', how='inner')
+    
+    # Create results directory
+    stat_tests_path = results_path / "statistical_tests"
+    os.makedirs(stat_tests_path, exist_ok=True)
+    
+    # Determine analysis type
+    if use_deltas:
+        # Calculate deltas
+        merged_df['similarity_delta'] = calculate_deltas(merged_df, 'similarity')
+        merged_df['f1_macro_delta'] = calculate_deltas(merged_df, 'f1_macro')
         
+        # Use delta columns for analysis
+        similarity_column = 'similarity_delta'
+        f1_column = 'f1_macro_delta'
+        plot_title_suffix = " (Deltas)"
+        test_title_suffix = " of Changes"
+    else:
+        # Use original columns
+        similarity_column = 'similarity'
+        f1_column = 'f1_macro'
+        plot_title_suffix = ""
+        test_title_suffix = ""
+
+    # Optional Normalization
+    if normalize:
+        # Min-Max Normalization
+        scaler = MinMaxScaler()
+        merged_df[f'{similarity_column}_normalized'] = scaler.fit_transform(merged_df[[similarity_column]])
+        merged_df[f'{f1_column}_normalized'] = scaler.fit_transform(merged_df[[f1_column]])
+        
+        # Update columns for analysis
+        similarity_column = f'{similarity_column}_normalized'
+        f1_column = f'{f1_column}_normalized'
+        plot_title_suffix += " (Normalized)"
+        test_title_suffix += " (Normalized)"
+    
+    # Get unique years
+    years = sorted(merged_df['year'].unique())
+    
+    # Initialize results dictionary
+    yearly_correlations = {}
+    
+    # Initialize plot
+    plt.figure(figsize=(12, 8))
+    
+    # Colors for different test types
+    pearson_color = 'blue'
+    spearman_color = 'red'
+    
+    # Legend elements
+    legend_elements = [
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=pearson_color, markersize=10, label='Pearson'),
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=spearman_color, markersize=10, label='Spearman')
+    ]
+    
+    # For the scatter plot
+    xs, ys, colors, labels = [], [], [], []
+    
+    # Perform analysis for each year
+    for year in years:
+        year_data = merged_df[merged_df['year'] == year]
+        
+        # Skip years with too few data points
+        if len(year_data) < 3:
+            logger.warning(f"Year {year} has fewer than 3 data points. Skipping.")
+            continue
+        
+        # Check normality
+        similarity_series = year_data[similarity_column]
+        f1_series = year_data[f1_column]
+        
+        # Determine if data is normally distributed
+        # We'll use Shapiro-Wilk test with alpha=0.05
+        _, similarity_p = stats.shapiro(similarity_series)
+        _, f1_p = stats.shapiro(f1_series)
+        
+        is_normal = similarity_p > 0.05 and f1_p > 0.05
+        
+        # Choose appropriate correlation method
+        if is_normal:
+            corr_func = stats.pearsonr
+            test_name = "Pearson"
+            point_color = pearson_color
+        else:
+            corr_func = stats.spearmanr
+            test_name = "Spearman"
+            point_color = spearman_color
+        
+        # Calculate correlation
+        correlation_coef, p_value = corr_func(similarity_series, f1_series)
+        
+        # Store results
+        yearly_correlations[str(year)] = {
+            'test_method': test_name,
+            'correlation_coefficient': float(correlation_coef),
+            'p_value': float(p_value),
+            'sample_size': len(year_data),
+            'is_significant': bool(p_value < 0.05)
+        }
+        
+        # Collect data for scatter plot
+        xs.append(year)
+        ys.append(correlation_coef)
+        colors.append(point_color)
+        labels.append(f"{year}")
+    
+    # Create scatter plot
+    plt.figure(figsize=(12, 8))
+    
+    # Plot correlation coefficients
+    for i, (x, y, color, label) in enumerate(zip(xs, ys, colors, labels)):
+        # Check if the year exists in yearly_correlations
+        if str(x) in yearly_correlations:
+            p_value = yearly_correlations[str(x)]['p_value']  # Access p-value for the year
+            plt.scatter(x, y, color=color, s=100, alpha=0.7)
+            plt.annotate(
+                f"{label}\n(p = {p_value:.4f})",  # Include p-value in the annotation
+                (x, y),
+                textcoords="offset points",
+                xytext=(0, 10),
+                ha='center'
+            )
+        else:
+            logger.warning(f"Skipping year {x} as it was not processed due to insufficient data.")
+        
+    # Add significance threshold lines
+    plt.axhline(y=0, color='gray', linestyle='-', alpha=0.5)
+    plt.axhline(y=0.3, color='gray', linestyle='--', alpha=0.3)
+    plt.axhline(y=-0.3, color='gray', linestyle='--', alpha=0.3)
+    plt.axhline(y=0.5, color='gray', linestyle='-.', alpha=0.3)
+    plt.axhline(y=-0.5, color='gray', linestyle='-.', alpha=0.3)
+    
+    # Add labels and title
+    plt.xlabel('Year')
+    plt.ylabel('Correlation Coefficient')
+    plt.title(f'Yearly Correlation: F1-Score vs Similarity{plot_title_suffix}\n{config["project_name"]}')
+    
+    # Adjust x-axis
+    plt.xticks(years)
+    plt.ylim(-1, 1)
+    
+    # Add legend
+    plt.legend(handles=legend_elements, loc='upper right')
+    
+    # Add grid
+    plt.grid(True, alpha=0.3)
+    
+    # Save plot
+    plt.tight_layout()
+    plt.savefig(stat_tests_path / f"yearly_correlations_{mode}.png")
+    plt.close()
+    
+    # Save correlation results
+    with open(stat_tests_path / f"yearly_correlation_results_{mode}.yaml", 'w') as f:
+        yaml.dump(yearly_correlations, f, default_flow_style=False)
+    
+    # Log results
+    logger.info("Yearly Correlation Analysis Results:")
+    for year, results in yearly_correlations.items():
+        logger.info(f"Year {year}: {results['test_method']} correlation = {results['correlation_coefficient']:.4f} (p = {results['p_value']:.4f})")
+    
+    logger.info(f"Results saved to {stat_tests_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Perform statistical tests on model performance and similarity.")
@@ -479,12 +736,29 @@ def main():
     )
     args = parser.parse_args()
     
+    # Perform the standard statistical tests
     perform_statistical_tests(
         args.config,
         args.use_deltas,
         args.normalize,
         args.mode
     )
+    
+    # Load the config file to check if split_type is 'month'
+    with open(args.config, 'r') as file:
+        config = yaml.safe_load(file)
+    
+    # Only perform yearly correlation analysis if split_type is 'month'
+    if config['split_type'] == 'month':
+        logger.info("Split type is 'month'. Performing yearly correlation analysis...")
+        perform_yearly_correlation_analysis(
+            args.config,
+            args.use_deltas,
+            args.normalize,
+            args.mode
+        )
+    else:
+        logger.info(f"Split type is '{config['split_type']}'. Skipping yearly correlation analysis.")
 
 if __name__ == "__main__":
     main()
