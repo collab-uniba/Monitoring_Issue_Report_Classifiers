@@ -50,4 +50,8 @@ sudo unzip -o "$JIRA_ZIP_FILE" -d jira_dataset
 echo "Restoring MongoDB dump..."
 mongorestore --gzip --archive="jira_dataset/ThePublicJiraDataset/3. DataDump/mongodump-JiraRepos.archive" --nsFrom "JiraRepos.*" --nsTo "JiraRepos.*"
 
+# Run the JS script to create the project keys report
+echo "Creating the project keys report..."
+mongosh JiraRepos data-preparation/project_keys_report.js --quiet > project_keys.txt
+
 echo "Done!"
