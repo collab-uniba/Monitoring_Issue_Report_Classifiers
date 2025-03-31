@@ -13,3 +13,4 @@ pytz
 pyYAML
 fastdtw
 seaborn
+setfit

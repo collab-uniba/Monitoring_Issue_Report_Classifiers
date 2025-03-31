@@ -13,6 +13,9 @@ tools/outputs*
 # Ignore the results directory and its files
 results/
 
+# Ignore all the folders that contain the word "results"
+*results*/
+
 # Ignore jira_dataset folder
 jira_dataset/
 

@@ -1,3 +1,4 @@
+# classification/similarity.py  
 import os
 import argparse
 import yaml
@@ -11,8 +12,10 @@ import torch
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-# Reuse functions from classify.py
-from classify import load_data, generate_results_path, LabelMapper
+# Import from our modules instead of classify.py
+from data_handlers import DataHandler, TimeWindow
+from model_manager import ModelManager
+from label_mapper import LabelMapper
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -103,61 +106,90 @@ def compute_embeddings(texts, model, batch_size=32):
 
     return model.encode(processed_texts, batch_size=batch_size, show_progress_bar=True, convert_to_tensor=True)
 
-def get_test_periods(data_dir, split_type, end_cutoff):
+def get_test_periods(data_handler, split_type, end_cutoff):
     """
     Get all available test periods from the data directory that come strictly after the end_cutoff.
     For monthly splits, ensures the end_cutoff month itself is excluded.
+    Uses DataHandler to find the files.
     """
     # Log training cutoff information
     if split_type == "year":
         logger.info(f"Training data cutoff: Year {end_cutoff}")
     elif split_type == "month":
-        logger.info(f"Training data cutoff: Year {end_cutoff[0]}, Month {end_cutoff[1]}")
+        logger.info(f"Training data cutoff: Year {end_cutoff.start_year}, Month {end_cutoff.start_month}")
     elif split_type == "day":
-        logger.info(f"Training data cutoff: Year {end_cutoff[0]}, Month {end_cutoff[1]}, Day {end_cutoff[2]}")
+        logger.info(f"Training data cutoff: Year {end_cutoff.start_year}, Month {end_cutoff.start_month}, Day {end_cutoff.start_day}")
     
     test_periods = []
     
-    for file_path in sorted(data_dir.glob("*.csv")):
-        file_name = file_path.stem  # Get filename without extension
-        
+    # Use the file_cache from data_handler which was populated during data loading
+    for filename, window in data_handler.file_cache.get(split_type, {}).items():
         if split_type == "year":
-            start_year = int(file_name.split('-')[0])
-            if start_year > end_cutoff:
-                test_periods.append(start_year)
+            if window.start_year > end_cutoff.end_year:
+                test_periods.append(TimeWindow(start_year=window.start_year, end_year=window.end_year))
         
         elif split_type == "month":
-            start_part = file_name.split('_')[0]
-            start_year, start_month = map(int, start_part.split('-'))
-            # Strictly after the end cutoff - if end_cutoff is (2005, 12), start with 2006-01
-            if start_year > end_cutoff[0] or (start_year == end_cutoff[0] and start_month > end_cutoff[1]):
-                test_periods.append((start_year, start_month))
+            if (window.start_year > end_cutoff.end_year or 
+                (window.start_year == end_cutoff.end_year and window.start_month > end_cutoff.end_month)):
+                test_periods.append(TimeWindow(
+                    start_year=window.start_year, 
+                    end_year=window.end_year,
+                    start_month=window.start_month, 
+                    end_month=window.end_month
+                ))
         
         elif split_type == "day":
-            start_part = file_name.split('_')[0]
-            start_year, start_month, start_day = map(int, start_part.split('-'))
-            if (start_year > end_cutoff[0] or 
-                (start_year == end_cutoff[0] and start_month > end_cutoff[1]) or
-                (start_year == end_cutoff[0] and start_month == end_cutoff[1] and start_day > end_cutoff[2])):
-                test_periods.append((start_year, start_month, start_day))
+            if (window.start_year > end_cutoff.end_year or 
+                (window.start_year == end_cutoff.end_year and window.start_month > end_cutoff.end_month) or
+                (window.start_year == end_cutoff.end_year and window.start_month == end_cutoff.end_month and 
+                 window.start_day > end_cutoff.end_day)):
+                test_periods.append(TimeWindow(
+                    start_year=window.start_year, 
+                    end_year=window.end_year,
+                    start_month=window.start_month, 
+                    end_month=window.end_month,
+                    start_day=window.start_day, 
+                    end_day=window.end_day
+                ))
+    
+    # Sort test periods
+    test_periods.sort()
     
     # Log test periods information
     logger.info(f"Found {len(test_periods)} test periods after the training cutoff")
     if test_periods:
         if split_type == "year":
-            logger.info(f"Test periods: Years {min(test_periods)} to {max(test_periods)}")
+            logger.info(f"Test periods: Years {test_periods[0].start_year} to {test_periods[-1].end_year}")
         elif split_type == "month":
-            start_year, start_month = min(test_periods)
-            end_year, end_month = max(test_periods)
-            logger.info(f"Test periods: {start_year}-{start_month:02d} to {end_year}-{end_month:02d}")
+            start = test_periods[0]
+            end = test_periods[-1]
+            logger.info(f"Test periods: {start.start_year}-{start.start_month:02d} to {end.end_year}-{end.end_month:02d}")
         elif split_type == "day":
-            start_year, start_month, start_day = min(test_periods)
-            end_year, end_month, end_day = max(test_periods)
-            logger.info(f"Test periods: {start_year}-{start_month:02d}-{start_day:02d} to {end_year}-{end_month:02d}-{end_day:02d}")
+            start = test_periods[0]
+            end = test_periods[-1]
+            logger.info(f"Test periods: {start.start_year}-{start.start_month:02d}-{start.start_day:02d} to "
+                        f"{end.end_year}-{end.end_month:02d}-{end.end_day:02d}")
     else:
         logger.warning("No test periods found after the cutoff date")
     
-    return sorted(test_periods)
+    return test_periods
+
+def generate_results_path(results_root, split_type, range_val, project_name, model_type,
+                         start_year, end_year, start_month=None, end_month=None,
+                         start_day=None, end_day=None):
+    """
+    Generate a path for storing results.
+    """
+    base_path = Path(results_root) / f"{split_type}_range_{range_val}" / project_name / model_type
+    
+    if split_type == "year":
+        time_str = f"{start_year}_{end_year}"
+    elif split_type == "month":
+        time_str = f"{start_year}-{start_month:02d}_{end_year}-{end_month:02d}"
+    else:  # day
+        time_str = f"{start_year}-{start_month:02d}-{start_day:02d}_{end_year}-{end_month:02d}-{end_day:02d}"
+    
+    return base_path / time_str
 
 def analyze_similarity(config_file, include_distribution=False, mode="max"):
     with open(config_file, 'r') as file:
@@ -176,11 +208,14 @@ def analyze_similarity(config_file, include_distribution=False, mode="max"):
                 (f", Month {config['end_month']}" if 'end_month' in config else "") +
                 (f", Day {config['end_day']}" if 'end_day' in config else ""))
 
+    model_type = config.get('model_type', 'roberta').lower()
+
     results_path = generate_results_path(
         config['results_root'],
         config['split_type'],
         config['range'],
         config['project_name'],
+        model_type,
         config['start_year'],
         config['end_year'],
         config.get('start_month'),
@@ -193,9 +228,13 @@ def analyze_similarity(config_file, include_distribution=False, mode="max"):
     os.makedirs(similarity_path, exist_ok=True)
 
     label_mapper = LabelMapper(label_set=config.get('label_set', []))
+    
+    # Initialize DataHandler
+    data_dir = Path(f"data/windows/{config['split_type']}_range_{config['range']}/{config['project_name']}")
+    data_handler = DataHandler(data_dir)
 
-    # Load training data
-    train_df = load_data(
+    # Load training data using DataHandler
+    df_train_val = data_handler.load_data(
         config['split_type'],
         config['range'],
         config['project_name'],
@@ -208,11 +247,18 @@ def analyze_similarity(config_file, include_distribution=False, mode="max"):
         end_day=config.get('end_day')
     )
 
-    # Ensure text column exists
-    train_df['text'] = train_df.apply(
-        lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}".strip(),
-        axis=1
+    train_df, _ = data_handler.prepare_dataset(
+            df_train_val, 
+            label_mapper,
+            tokenizer=None,  # Tokenizer will be created in model training
+            use_validation=config.get('use_validation', True),
+            split_size=config.get('split_size', 0.3)
     )
+
+    # If the model is SetFit, sample a subset of the training data
+    if config.get('model_type', 'roberta').lower() == 'setfit':
+        train_df = data_handler.sample_training_data(train_df)
+
 
     logger.info("Loading Sentence Transformer model...")
     model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -220,18 +266,18 @@ def analyze_similarity(config_file, include_distribution=False, mode="max"):
     logger.info("Computing embeddings for training data...")
     train_embeddings = compute_embeddings(train_df['text'].tolist(), model)
 
-    # Get data directory and end cutoff based on split type
-    data_dir = Path(f"data/windows/{config['split_type']}_range_{config['range']}/{config['project_name']}")
+    # Create TimeWindow for end cutoff
+    end_cutoff = TimeWindow(
+        start_year=config['end_year'],
+        end_year=config['end_year'],
+        start_month=config.get('end_month'),
+        end_month=config.get('end_month'),
+        start_day=config.get('end_day'),
+        end_day=config.get('end_day')
+    )
 
-    if config['split_type'] == 'year':
-        end_cutoff = config['end_year']
-    elif config['split_type'] == 'month':
-        end_cutoff = (config['end_year'], config['end_month'])
-    else:  # day
-        end_cutoff = (config['end_year'], config['end_month'], config['end_day'])
-
-    # Get all available test periods
-    test_periods = get_test_periods(data_dir, config['split_type'], end_cutoff)
+    # Get all available test periods using data_handler
+    test_periods = get_test_periods(data_handler, config['split_type'], end_cutoff)
     logger.info(f"Found {len(test_periods)} test periods after the training cutoff")
 
     similarity_results = []
@@ -239,56 +285,37 @@ def analyze_similarity(config_file, include_distribution=False, mode="max"):
     train_embeddings = train_embeddings.to(device)
 
     for period in test_periods:
+        # Load test data using DataHandler
+        test_df = data_handler.load_data(
+            config['split_type'],
+            config['range'],
+            config['project_name'],
+            period.start_year,
+            period.end_year,
+            label_mapper,
+            start_month=period.start_month,
+            end_month=period.end_month,
+            start_day=period.start_day,
+            end_day=period.end_day,
+            test=True,
+            exact_date=True
+        )
+
+        # Generate period string for display/logs
         if config['split_type'] == 'year':
-            test_df = load_data(
-                config['split_type'],
-                config['range'],
-                config['project_name'],
-                period,
-                period,
-                label_mapper,
-                test=True,
-                exact_date=True
-            )
-            period_str = str(period)
+            period_str = str(period.start_year)
         elif config['split_type'] == 'month':
-            year, month = period
-            test_df = load_data(
-                config['split_type'],
-                config['range'],
-                config['project_name'],
-                year,
-                year,
-                label_mapper,
-                start_month=month,
-                end_month=month,
-                test=True,
-                exact_date=True
-            )
-            period_str = f"{year}-{month:02d}"
+            period_str = f"{period.start_year}-{period.start_month:02d}"
         else:  # day
-            year, month, day = period
-            test_df = load_data(
-                config['split_type'],
-                config['range'],
-                config['project_name'],
-                year,
-                year,
-                label_mapper,
-                start_month=month,
-                end_month=month,
-                start_day=day,
-                end_day=day,
-                test=True,
-                exact_date=True
-            )
-            period_str = f"{year}-{month:02d}-{day:02d}"
+            period_str = f"{period.start_year}-{period.start_month:02d}-{period.start_day:02d}"
 
         if not test_df.empty:
-            test_df['text'] = test_df.apply(
-                lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}".strip(),
-                axis=1
-            )
+            # Ensure text column exists
+            if 'text' not in test_df.columns:
+                test_df['text'] = test_df.apply(
+                    lambda row: f"{preprocess_text(row.get('title', ''))} {preprocess_text(row.get('body', ''))}".strip(),
+                    axis=1
+                )
 
             logger.info(f"Computing embeddings for test period {period_str}...")
             test_embeddings = compute_embeddings(test_df['text'].tolist(), model).to(device)
@@ -345,11 +372,8 @@ def analyze_similarity(config_file, include_distribution=False, mode="max"):
 
     # Plot distribution metrics if requested
     if include_distribution:
-        if dist_cols := [
-            col
-            for col in results_df.columns
-            if col.startswith('dist_') and col != 'dist_std'
-        ]:
+        dist_cols = [col for col in results_df.columns if col.startswith('dist_') and col != 'dist_std']
+        if dist_cols:
             plt.figure(figsize=(12, 8))
             for col in dist_cols:
                 plt.plot(results_df['period'], results_df[col], marker='o', label=col.replace('dist_', ''))
@@ -375,7 +399,7 @@ def analyze_similarity(config_file, include_distribution=False, mode="max"):
             plt.close()
 
     logger.info(f"Results saved to {similarity_path}")
-    logger.info(f"Similarity results saved to {similarity_path / 'similarity_scores_{mode}.csv'}")
+    logger.info(f"Similarity results saved to {similarity_path / f'similarity_scores_{mode}.csv'}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze similarity between train and test sets.")

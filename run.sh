@@ -6,12 +6,20 @@ default_config_dir="config"
 declare -a configs=(
     "config-apache-y1.yaml"
     "config-jira-y1.yaml"
-    "config-mongodb-y1.yaml"
     "config-redhat-y1.yaml"
+    "config-mongodb-y1.yaml"
     "config-apache-m1.yaml"
     "config-jira-m1.yaml"
     "config-redhat-m1.yaml"
     "config-mongodb-m1.yaml"
+    "config-apache-y1-setfit.yaml"
+    "config-jira-y1-setfit.yaml"
+    "config-redhat-y1-setfit.yaml"
+    "config-mongodb-y1-setfit.yaml"
+    "config-apache-m1-setfit.yaml"
+    "config-jira-m1-setfit.yaml"
+    "config-redhat-m1-setfit.yaml"
+    "config-mongodb-m1-setfit.yaml"
 )
 # Check for mode argument
 if [ "$#" -ne 1 ]; then
