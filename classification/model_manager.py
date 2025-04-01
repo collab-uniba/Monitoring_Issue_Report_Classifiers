@@ -27,6 +27,10 @@ class ModelManager:
             label_mapper: Utility for mapping labels
         """
         self.label_mapper = label_mapper
+        self.tokenizer = None
+        self.model = None
+        self.trainer = None
+        self.model_type = None
 
     def create_model(self, config):
         """
@@ -38,17 +42,19 @@ class ModelManager:
         Returns:
             Initialized model
         """
-        model_type = config.get('model_type', 'roberta').lower()
+        self.model_type = config.get('model_type', 'roberta').lower()
+
+        logger.info(f"Creating model of type {self.model_type} with config: {config}")
         
-        if model_type == 'setfit':
-            return self._create_setfit_model(config)
+        if self.model_type == 'setfit':
+            self._create_setfit_model(config)
         else:
-            return self._create_transformer_model(config)
+            self._create_transformer_model(config)
 
     def _create_setfit_model(self, config):
         """Create SetFit model."""
         if config.get('presaved_model_path'):
-            return SetFitModel.from_pretrained(
+            self.model = SetFitModel.from_pretrained(
                 Path(config['presaved_model_path']),
                 num_classes=self.label_mapper.num_labels
             )
@@ -58,7 +64,7 @@ class ModelManager:
             'all-MiniLM-L6-v2'
         )
         
-        return SetFitModel.from_pretrained(
+        self.model = SetFitModel.from_pretrained(
             sentence_transformer_model,
             num_classes=self.label_mapper.num_labels
         )
@@ -67,11 +73,11 @@ class ModelManager:
     def _create_transformer_model(self, config):
         """Create Transformer-based classification model."""
         if config.get('presaved_model_path'):
-            return AutoModelForSequenceClassification.from_pretrained(
+            self.model = AutoModelForSequenceClassification.from_pretrained(
                 Path(config['presaved_model_path']),
                 num_labels=self.label_mapper.num_labels
             )
-        return AutoModelForSequenceClassification.from_pretrained(
+        self.model = AutoModelForSequenceClassification.from_pretrained(
             config['model_name'],
             num_labels=self.label_mapper.num_labels
         )
@@ -89,12 +95,11 @@ class ModelManager:
         Returns:
             Trained model and trainer
         """
-        model_type = config.get('model_type', 'roberta').lower()
         
-        if model_type == 'setfit':
-            return self._train_setfit(train_dataset, validation_dataset, config, results_path)
+        if self.model_type == 'setfit':
+            self._train_setfit(train_dataset, validation_dataset, config, results_path)
         else:
-            return self._train_transformer(train_dataset, validation_dataset, config, results_path)
+            self._train_transformer(train_dataset, validation_dataset, config, results_path)
 
     def _train_setfit(self, train_dataset, validation_dataset, config, results_path):
         """Train SetFit model."""
@@ -110,10 +115,9 @@ class ModelManager:
 
         logger.info(f"Column names in train dataset: {train_dataset.column_names}")
         
-        model = self.create_model(config)
-        
-        trainer = SetFitTrainer(
-            model=model,
+        self.trainer = SetFitTrainer(
+            output_dir=results_path,
+            model=self.model,
             train_dataset=train_dataset,
             eval_dataset=validation_dataset,
             batch_size=batch_size,
@@ -121,22 +125,26 @@ class ModelManager:
             num_epochs=num_epochs
         )
         
-        trainer.train()
-        return trainer, model
+        self.trainer.train()
 
     def _train_transformer(self, train_dataset, validation_dataset, config, results_path):
         """Train Transformer-based model."""
-        model = self.create_model(config)
-        tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
+        self.tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
 
         # Tokenize datasets
         def tokenize_function(examples):
-            return tokenizer(
+            return self.tokenizer(
                 examples['text'], 
                 padding='max_length', 
                 truncation=True, 
-                max_length=config['max_length']
             )
+        
+        # Convert dataframe to Dataset
+        if isinstance(train_dataset, pd.DataFrame):
+            train_dataset = Dataset.from_pandas(train_dataset)
+        if validation_dataset and isinstance(validation_dataset, pd.DataFrame):
+            validation_dataset = Dataset.from_pandas(validation_dataset)
+        
         train_dataset = train_dataset.map(tokenize_function, batched=True)
         if validation_dataset:
             validation_dataset = validation_dataset.map(tokenize_function, batched=True)
@@ -155,31 +163,24 @@ class ModelManager:
             adam_epsilon=float(config['training_args']['adam_epsilon']),
         )
 
-        trainer = Trainer(
-            model=model,
+        self.trainer = Trainer(
+            model=self.model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=validation_dataset,
         )
 
-        trainer.train()
-        return trainer, model
+        self.trainer.train()
 
-    def save_model(self, model, tokenizer, model_save_path, model_type):
+
+    def save_model(self, model_save_path):
         """
         Save model and associated metadata.
         
         Args:
-            model: Trained model
-            tokenizer: Model tokenizer (optional)
             model_save_path: Path to save model
-            model_type: Type of model (setfit or transformer)
         """
-        if model_type == 'setfit':
-            model.save_pretrained(model_save_path)
-        else:
-            model.save_pretrained(model_save_path)
-            tokenizer.save_pretrained(model_save_path)
+        self.model.save_pretrained(model_save_path)
 
         # Save label mapping
         label_mapping_path = Path(model_save_path) / "label_mapping.yaml"
@@ -187,26 +188,27 @@ class ModelManager:
             yaml.dump({
                 'label_to_id': self.label_mapper.label_to_id,
                 'id_to_label': self.label_mapper.id_to_label,
-                'model_type': model_type
+                'model_type': self.model_type
             }, f)
 
-    def evaluate_model(self, model, test_df, results_path, model_type='transformer'):
+    def evaluate_model(self, test_df, results_path):
         """
         Evaluate model on test dataset.
         
         Args:
-            model: Trained model
             test_df: Test DataFrame
             results_path: Path to save results
-            model_type: Type of model
         
         Returns:
             Evaluation reports and predictions
         """
-        if model_type == 'setfit':
-            pred_labels, true_labels = self._evaluate_setfit(model, test_df)
+        logger.info(f"Evaluating model of type {self.model_type} on test data.")
+        logger.info(f"Test data shape: {test_df.shape}")
+
+        if self.model_type == 'setfit':
+            pred_labels, true_labels = self._evaluate_setfit(test_df)
         else:
-            pred_labels, true_labels = self._evaluate_transformer(model, test_df)
+            pred_labels, true_labels = self._evaluate_transformer(test_df)
 
         # Generate classification reports
         file_reports = self._generate_file_reports(test_df, true_labels, pred_labels)
@@ -221,32 +223,46 @@ class ModelManager:
 
         # Save predictions
         test_df['predicted_label'] = pred_labels
+        test_df['label'] = test_df['label'].apply(lambda x: self.label_mapper.inverse_map([x])[0])
         test_df.to_csv(results_path / "predictions.csv", index=False)
 
         return file_reports, aggregated_report
 
-    def _evaluate_setfit(self, model, test_df):
+    def _evaluate_setfit(self, test_df):
         """Evaluate SetFit model."""
         test_df['text'] = test_df['text'].fillna("")
         texts = test_df['text'].tolist()
-        predictions = model.predict(texts)
+        predictions = self.model.predict(texts)
         
         pred_labels = [self.label_mapper.inverse_map([pred.item()])[0] for pred in predictions]
         true_labels = self.label_mapper.inverse_map(test_df['label'].to_numpy())
         
         return pred_labels, true_labels
 
-    def _evaluate_transformer(self, model, test_df):
+    def _evaluate_transformer(self, test_df):
         """Evaluate Transformer model."""
-        trainer = Trainer(model=model)
-        predictions = trainer.predict(test_df)
+        # Convert DataFrame to Hugging Face Dataset
+        test_dataset = Dataset.from_pandas(test_df)
         
+        # Tokenization function
+        def tokenize_function(examples):
+            return self.tokenizer(examples['text'], padding='max_length', truncation=True)
+        
+        # Tokenize dataset
+        test_dataset = test_dataset.map(tokenize_function, batched=True)
+        
+        trainer = Trainer(model=self.model)
+        
+        # Perform predictions
+        predictions = trainer.predict(test_dataset)
         preds = predictions.predictions.argmax(-1)
-        labels = test_df['labels'].to_numpy()
+        logger.info(f"Column names in test dataset: {test_df.columns}")
+        labels = test_df['label'].to_numpy()
 
+        # Convert numeric predictions and labels back to original label names
         pred_labels = self.label_mapper.inverse_map(preds)
         true_labels = self.label_mapper.inverse_map(labels)
-        
+            
         return pred_labels, true_labels
 
     def _generate_file_reports(self, test_df, true_labels, pred_labels):

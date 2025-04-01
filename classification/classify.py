@@ -33,8 +33,12 @@ def generate_results_path(config):
     project_name = config['project_name']
     
     base_path = Path(config.get('results_root', 'results'))
-    date_folder = f"{config['start_year']}-{config.get('start_month', '01')}_" \
-                  f"{config['end_year']}-{config.get('end_month', '12')}"
+
+    if split_type == "year":
+        date_folder = f"{config['start_year']}_{config['end_year']}"
+    elif split_type == "month":
+        date_folder = f"{config['start_year']}-{config.get('start_month', '01')}_" \
+                f"{config['end_year']}-{config.get('end_month', '12')}"
     
     results_path = base_path / project_name / model_type / f"{split_type}_range_{range_val}" / date_folder
     os.makedirs(results_path, exist_ok=True)
@@ -56,10 +60,12 @@ def main(config_file):
     model_save_path = results_path / "model"
     os.makedirs(model_save_path, exist_ok=True)
     
+    logger.info(f"Creating model of type {config['model_type']}")
+    model_manager.create_model(config)
+
     # Check for pre-saved model
     if config.get('presaved_model_path'):
-        logger.info(f"Using pre-saved model from {config['presaved_model_path']}")
-        model = model_manager.create_model(config) 
+        logger.info(f"Loading pre-saved model from {config['presaved_model_path']}")
     else:
         # Load training data
         df_train_val = data_handler.load_data(
@@ -87,19 +93,16 @@ def main(config_file):
             train_dataset = data_handler.sample_training_data(train_dataset)
 
         # Train model
-        _, model = model_manager.train_model(
+        model_manager.train_model(
             train_dataset, 
             validation_dataset, 
-            config, 
-            results_path
+            config,
+            results_path,
         )
 
         # Save model
         model_manager.save_model(
-            model, 
-            None,  # Tokenizer (will be None for SetFit)
             model_save_path, 
-            config.get('model_type', 'roberta').lower()
         )
 
     # Load test data
@@ -115,12 +118,12 @@ def main(config_file):
         test=True
     )
 
+    logger.info(f"Loaded test data with {len(df_test)} samples.")
+
     # Evaluate model
     model_manager.evaluate_model(
-        model, 
         df_test, 
         results_path, 
-        config.get('model_type', 'roberta').lower()
     )
 
 if __name__ == "__main__":
