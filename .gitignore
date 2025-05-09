@@ -24,3 +24,9 @@ __pycache__/
 
 # Ignore the venv/ directory and its files
 venv/
+
+# Ignore the logs/ directory and its files
+logs/
+
+# Ignore eventual checkpoints
+checkpoints/
