@@ -77,6 +77,7 @@ class ModelManager:
                 Path(config['presaved_model_path']),
                 num_labels=self.label_mapper.num_labels
             )
+        self.tokenizer = AutoTokenizer.from_pretrained(config.get('model_name'))
         self.model = AutoModelForSequenceClassification.from_pretrained(
             config['model_name'],
             num_labels=self.label_mapper.num_labels
@@ -116,7 +117,6 @@ class ModelManager:
         logger.info(f"Column names in train dataset: {train_dataset.column_names}")
         
         self.trainer = SetFitTrainer(
-            output_dir=results_path,
             model=self.model,
             train_dataset=train_dataset,
             eval_dataset=validation_dataset,
@@ -129,7 +129,6 @@ class ModelManager:
 
     def _train_transformer(self, train_dataset, validation_dataset, config, results_path):
         """Train Transformer-based model."""
-        self.tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
 
         # Tokenize datasets
         def tokenize_function(examples):
