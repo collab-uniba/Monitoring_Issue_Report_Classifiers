@@ -18,6 +18,7 @@ use_validation: false        # Whether to use a validation set
 split_size: 0.3             # Size of the validation split (if use_validation is true)
 
 model_name: "roberta-base"  # Pretrained model name
+model_type: roberta
 training_args:              # Training arguments for the Trainer
   num_train_epochs: 4
   per_device_train_batch_size: 32
@@ -28,4 +29,4 @@ training_args:              # Training arguments for the Trainer
   learning_rate: 2e-5
   adam_epsilon: 1e-8
   eval_steps: 100
-presaved_model_path: "results/Jira/roberta/year_range_1/2002-2006/model"
+presaved_model_path: "results/Jira/roberta/year_range_1/2002_2006/model"
