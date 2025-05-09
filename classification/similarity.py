@@ -180,7 +180,7 @@ def generate_results_path(results_root, split_type, range_val, project_name, mod
     """
     Generate a path for storing results.
     """
-    base_path = Path(results_root) / f"{split_type}_range_{range_val}" / project_name / model_type
+    base_path = Path(results_root) / project_name / f"{split_type}_range_{range_val}" / model_type
     
     if split_type == "year":
         time_str = f"{start_year}_{end_year}"
