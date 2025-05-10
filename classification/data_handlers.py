@@ -258,49 +258,62 @@ class DataHandler:
         return df_all
 
     @staticmethod
-    def sample_training_data(df, 
-                              sampling_strategy='random', 
-                              samples_per_class=50, 
-                              seed=42) -> pd.DataFrame:
+    def sample_training_data(df: pd.DataFrame,
+                             sampling_strategy: str = 'balanced',
+                             samples_per_class: int = 50,
+                             seed: int = 42) -> pd.DataFrame:
         """
         Sample training data with different strategies.
-        
+
         Args:
-            df: DataFrame with training data
-            sampling_strategy: Strategy to use ('random', 'balanced', 'stratified')
-            samples_per_class: Number of samples per class
-            seed: Random seed for reproducibility
-        
+            df: DataFrame with training data (must contain a 'label' column).
+            sampling_strategy: Strategy to use ('random', 'balanced', 'stratified').
+            samples_per_class: Target number of samples per class or total samples (varies by strategy).
+            seed: Random seed for reproducibility.
+
         Returns:
-            DataFrame with sampled training data
+            DataFrame with sampled training data.
         """
         np.random.seed(seed)
-        sampled_data = []
-        
-        for label in df['label'].unique():
-            class_data = df[df['label'] == label]
-            
-            if sampling_strategy == 'random':
-                sampled_data.append(class_data.sample(
-                    min(len(class_data), samples_per_class), 
-                    random_state=seed
-                ))
-            elif sampling_strategy == 'balanced':
-                sampled_data.append(class_data.sample(
-                    min(len(class_data), samples_per_class), 
-                    random_state=seed
-                ))
-            elif sampling_strategy == 'stratified':
-                class_proportion = len(class_data) / len(df)
-                n_samples = max(
-                    int(samples_per_class * class_proportion * len(df['label'].unique())), 
-                    min(3, len(class_data))
-                )
-                sampled_data.append(
-                    class_data.sample(min(n_samples, len(class_data)), random_state=seed)
-                )
-        
-        return pd.concat(sampled_data, ignore_index=True)
+
+        if sampling_strategy == 'random':
+            sampled_data = []
+            for label in df['label'].unique():
+                class_data = df[df['label'] == label]
+                n = min(len(class_data), samples_per_class)
+                if n == len(class_data):
+                    logger.warning(f"Class {label} has fewer samples than requested ({n} < {samples_per_class}).")
+                sampled_data.append(class_data.sample(n, random_state=seed))
+            return pd.concat(sampled_data, ignore_index=True)
+
+        elif sampling_strategy == 'balanced':
+            # Undersample all classes to the same minimum number across all classes or samples_per_class
+            min_samples = min(df['label'].value_counts().min(), samples_per_class)
+            if df['label'].value_counts().min() < samples_per_class:
+                logger.warning(f"Some classes have fewer samples than requested ({min_samples} < {samples_per_class}).")
+            sampled_data = []
+            for label in df['label'].unique():
+                class_data = df[df['label'] == label]
+                sampled_data.append(class_data.sample(min_samples, random_state=seed))
+            return pd.concat(sampled_data, ignore_index=True)
+
+        elif sampling_strategy == 'stratified':
+            total_samples = samples_per_class * df['label'].nunique()
+            # Can't stratify more samples than exist
+            total_samples = min(len(df), total_samples)
+            if total_samples < len(df):
+                logger.warning(f"Stratified sampling requested more samples than available ({total_samples} < {len(df)}).")
+            stratified_df, _ = train_test_split(
+                df,
+                train_size=total_samples,
+                stratify=df['label'],
+                random_state=seed
+            )
+            return stratified_df.reset_index(drop=True)
+
+        else:
+            raise ValueError(f"Unknown sampling_strategy: {sampling_strategy}")
+
 
     def prepare_dataset(self, 
                         df, 
