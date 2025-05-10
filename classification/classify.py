@@ -90,7 +90,7 @@ def main(config_file):
 
         # If the model is SetFit, sample a subset of the training data
         if config.get('model_type', 'roberta').lower() == 'setfit':
-            train_dataset = data_handler.sample_training_data(train_dataset)
+            train_dataset = data_handler.sample_training_data(train_dataset, sampling_strategy='balanced', samples_per_class=50, seed=42)
 
         # Train model
         model_manager.train_model(
