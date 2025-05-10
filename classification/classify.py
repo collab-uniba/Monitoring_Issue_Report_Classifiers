@@ -120,6 +120,15 @@ def main(config_file):
 
     logger.info(f"Loaded test data with {len(df_test)} samples.")
 
+    # Prepare test dataset
+    test_dataset = data_handler.prepare_dataset(
+        df_test, 
+        label_mapper,
+        tokenizer=None,  # Tokenizer will be created in model training
+        use_validation=False,
+    )
+    logger.info(f"Prepared test dataset with {len(test_dataset)} samples.")
+
     # Evaluate model
     model_manager.evaluate_model(
         df_test, 
