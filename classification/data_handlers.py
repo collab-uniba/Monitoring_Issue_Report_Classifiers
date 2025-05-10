@@ -320,7 +320,7 @@ class DataHandler:
                         label_mapper, 
                         tokenizer=None, 
                         max_token_len=512, 
-                        use_validation=True, 
+                        use_validation=False, 
                         split_size=0.3):
         """
         Prepare dataset for training, including optional validation split.
