@@ -126,6 +126,7 @@ class ModelManager:
         )
         
         self.trainer.train()
+        self.model = self.trainer.model
 
     def _train_transformer(self, train_dataset, validation_dataset, config, results_path):
         """Train Transformer-based model."""
@@ -170,6 +171,7 @@ class ModelManager:
         )
 
         self.trainer.train()
+        self.model = self.trainer.model
 
 
     def save_model(self, model_save_path):
