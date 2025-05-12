@@ -253,9 +253,12 @@ class ModelManager:
         
         # Tokenize dataset
         test_dataset = test_dataset.map(tokenize_function, batched=True)
+
+        # Instantiate Trainer just for evaluation
+        self.trainer = Trainer(model=self.model)
         
         # Perform predictions
-        predictions = self.model.predict(test_dataset)
+        predictions = self.trainer.predict(test_dataset)
         preds = predictions.predictions.argmax(-1)
         logger.info(f"Column names in test dataset: {test_df.columns}")
         labels = test_df['label'].to_numpy()
