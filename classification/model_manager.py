@@ -58,16 +58,17 @@ class ModelManager:
                 Path(config['presaved_model_path']),
                 num_classes=self.label_mapper.num_labels
             )
-        # Default to using a sentence transformer model
-        sentence_transformer_model = config.get(
-            'sentence_transformer_model', 
-            'all-MiniLM-L6-v2'
-        )
-        
-        self.model = SetFitModel.from_pretrained(
-            sentence_transformer_model,
-            num_classes=self.label_mapper.num_labels
-        )
+        else:
+            # Default to using a sentence transformer model
+            sentence_transformer_model = config.get(
+                'sentence_transformer_model', 
+                'all-MiniLM-L6-v2'
+            )
+            
+            self.model = SetFitModel.from_pretrained(
+                sentence_transformer_model,
+                num_classes=self.label_mapper.num_labels
+            )
     
 
     def _create_transformer_model(self, config):
@@ -252,10 +253,8 @@ class ModelManager:
         # Tokenize dataset
         test_dataset = test_dataset.map(tokenize_function, batched=True)
         
-        trainer = Trainer(model=self.model)
-        
         # Perform predictions
-        predictions = trainer.predict(test_dataset)
+        predictions = self.trainer.predict(test_dataset)
         preds = predictions.predictions.argmax(-1)
         logger.info(f"Column names in test dataset: {test_df.columns}")
         labels = test_df['label'].to_numpy()
