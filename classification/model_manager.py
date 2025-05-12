@@ -78,11 +78,12 @@ class ModelManager:
                 Path(config['presaved_model_path']),
                 num_labels=self.label_mapper.num_labels
             )
+        else:
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                config['model_name'],
+                num_labels=self.label_mapper.num_labels
+            )
         self.tokenizer = AutoTokenizer.from_pretrained(config.get('model_name'))
-        self.model = AutoModelForSequenceClassification.from_pretrained(
-            config['model_name'],
-            num_labels=self.label_mapper.num_labels
-        )
 
     def train_model(self, train_dataset, validation_dataset, config, results_path):
         """
