@@ -496,10 +496,11 @@ def perform_yearly_correlation_analysis(config_file, use_deltas=False, normalize
     # Generate paths
     results_path = Path(config['results_root'])
     results_path = results_path / (
+        f"{config['project_name']}/"
+        f"{config['model_type']}/"
         f"{config['split_type']}_range_{config['range']}/"
         f"{config['start_year']}-{config.get('start_month', 'all')}_"
-        f"{config['end_year']}-{config.get('end_month', 'all')}/"
-        f"{config['project_name']}"
+        f"{config['end_year']}-{config.get('end_month', 'all')}"
     )
     
     # Load similarity scores
