@@ -18,7 +18,7 @@ def numpy_representer(dumper, data):
     if isinstance(data, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64,
                          np.uint8, np.uint16, np.uint32, np.uint64)):
         return dumper.represent_int(int(data))
-    elif isinstance(data, (np.float_, np.float16, np.float32, np.float64)):
+    elif isinstance(data, (np.float16, np.float32, np.float64)):  # Removed np.float_
         return dumper.represent_float(float(data))
     elif isinstance(data, (np.ndarray,)):
         return dumper.represent_list(data.tolist())
@@ -27,12 +27,10 @@ def numpy_representer(dumper, data):
     return dumper.represent_scalar('tag:yaml.org,2002:str', str(data))
 
 # Add custom representer to PyYAML
-yaml.add_representer(np.ndarray, numpy_representer)
-yaml.add_representer(np.float64, numpy_representer)
-yaml.add_representer(np.float32, numpy_representer)
-yaml.add_representer(np.int64, numpy_representer)
-yaml.add_representer(np.int32, numpy_representer)
+yaml.add_representer(np.integer, numpy_representer)
+yaml.add_representer(np.floating, numpy_representer)
 yaml.add_representer(np.bool_, numpy_representer)
+yaml.add_representer(np.ndarray, numpy_representer)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -285,6 +283,10 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
         'sample_size': len(merged_df)
     }
 
+    # If the p-value is less than 0.05, we consider it significant
+    correlation_results['is_significant'] = p_value < 0.05
+    correlation_results['significance_level'] = 0.05
+
     with open(stat_tests_path / f"correlation_results_{mode}.yaml", 'w') as f:
         yaml.dump(correlation_results, f, default_flow_style=False)
     
@@ -466,6 +468,27 @@ def perform_statistical_tests(config_file, use_deltas=False, normalize=False, mo
     
     plt.tight_layout()
     plt.savefig(stat_tests_path / f"fastdtw_analysis_{mode}.png")
+    plt.close()
+
+    # Plot also the min-max normalized series alone
+    plt.figure(figsize=(10, 6))
+    plt.title(f'Min-Max Normalized Series{delta_suffix}')
+    plt.plot(
+        range(len(merged_df)),
+        np.array(dtw_results['minmax']['similarity_normalized']).flatten(),
+        label='Cosine Similarity'
+    )
+    plt.plot(
+        range(len(merged_df)),
+        np.array(dtw_results['minmax']['f1_normalized']).flatten(),
+        label='F1 Macro Score'
+    )
+    plt.xticks(tick_positions, tick_labels, rotation=45)
+    plt.xlabel('Period')
+    plt.ylabel('Normalized Value')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(stat_tests_path / f"minmax_normalized_series_{mode}.png")
     plt.close()
     
     # Log DTW results
