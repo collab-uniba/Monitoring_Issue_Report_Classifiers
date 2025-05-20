@@ -185,9 +185,9 @@ def generate_results_path(results_root, split_type, range_val, project_name, mod
     if split_type == "year":
         time_str = f"{start_year}_{end_year}"
     elif split_type == "month":
-        time_str = f"{start_year}-{start_month:02d}_{end_year}-{end_month:02d}"
+        time_str = f"{start_year}-{start_month}_{end_year}-{end_month}"
     else:  # day
-        time_str = f"{start_year}-{start_month:02d}-{start_day:02d}_{end_year}-{end_month:02d}-{end_day:02d}"
+        time_str = f"{start_year}-{start_month}-{start_day}_{end_year}-{end_month}-{end_day}"
     
     return base_path / time_str
 
