@@ -5,7 +5,6 @@ torch
 transformers
 scikit-learn
 accelerate
-jupyterlab
 imbalanced-learn
 sentence-transformers
 pymongo
