@@ -145,7 +145,7 @@ def get_dataset_stats(config_path):
         if 'file_name' in df_train.columns:
             training_files = sorted(df_train['file_name'].unique())
             stats['training_months'] = len(training_files)
-            stats['training_month_files'] = training_files.tolist()
+            stats['training_month_files'] = list(training_files)
             logger.info(f"Training: {stats['training_months']} months, {stats['training_instances']} instances")
             logger.info(f"Training month files: {', '.join(training_files)}")
         
@@ -174,7 +174,7 @@ def get_dataset_stats(config_path):
         if 'file_name' in df_test.columns:
             test_files = sorted(df_test['file_name'].unique())
             stats['test_months'] = len(test_files)
-            stats['test_month_files'] = test_files.tolist()
+            stats['test_month_files'] = list(test_files)
             logger.info(f"Test: {stats['test_months']} months, {stats['test_instances']} instances")
             logger.info(f"Test month files: {', '.join(test_files)}")
             
