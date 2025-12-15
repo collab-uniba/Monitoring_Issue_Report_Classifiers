@@ -1,0 +1,15 @@
+results_root: "results"
+split_type: "month"
+range: "1"
+project_name: "TestProject"
+start_year: 2020
+end_year: 2020
+start_month: 1
+end_month: 1
+label_set:
+  - 0
+  - 1
+  - 2
+use_validation: false
+model_name: "roberta-base"
+model_type: roberta

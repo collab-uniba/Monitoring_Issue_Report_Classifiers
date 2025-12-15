@@ -309,8 +309,9 @@ def format_monthly_distribution_table(df_monthly, labels, project_name):
         header_parts.append(f"CumL{label}")
     header_parts.extend(["Total", "CumTotal"])
     
-    lines.append(" | ".join(f"{h:>12}" for h in header_parts))
-    lines.append("-" * (15 * len(header_parts)))
+    header_line = " | ".join(f"{h:>12}" for h in header_parts)
+    lines.append(header_line)
+    lines.append("-" * len(header_line))
     
     # Add data rows
     for _, row in df_monthly.iterrows():
@@ -331,7 +332,9 @@ def format_monthly_distribution_table(df_monthly, labels, project_name):
         lines.append(" | ".join(row_parts))
     
     lines.append("="*80)
-    lines.append(f"Legend: L{labels[0]}/L{labels[1]} = Label counts, CumL = Cumulative label counts")
+    # Create legend dynamically based on number of labels
+    label_legend = "/".join([f"L{label}" for label in labels])
+    lines.append(f"Legend: {label_legend} = Label counts, CumL = Cumulative label counts")
     lines.append(f"Total = Total samples in month, CumTotal = Cumulative total samples")
     lines.append("")
     
