@@ -184,6 +184,195 @@ def get_dataset_stats(config_path):
     return stats
 
 
+def get_monthly_label_distribution(config_path):
+    """
+    Calculate label distribution per month and cumulative statistics.
+    
+    Args:
+        config_path: Path to the YAML configuration file
+        
+    Returns:
+        DataFrame with monthly distribution and cumulative counts
+    """
+    # Load configuration
+    config_manager = ConfigManager(config_path)
+    config = config_manager.get_config()
+    
+    project_name = config['project_name']
+    split_type = config['split_type']
+    range_val = config['range']
+    start_year = config['start_year']
+    end_year = config['end_year']
+    start_month = config.get('start_month', 1)
+    end_month = config.get('end_month', 12)
+    
+    # Check if data directory exists
+    data_dir = Path(f"data/windows/{split_type}_range_{range_val}/{project_name}")
+    
+    if not data_dir.exists():
+        logger.warning(f"Data directory not found: {data_dir}")
+        return None
+    
+    # Initialize components
+    label_mapper = LabelMapper(config.get('label_set', []))
+    data_handler = DataHandler(data_dir)
+    
+    try:
+        # Load training data
+        df_train = data_handler.load_data(
+            split_type,
+            range_val,
+            project_name,
+            start_year,
+            end_year,
+            label_mapper,
+            start_month,
+            end_month,
+            test=False
+        )
+        
+        if 'file_name' not in df_train.columns or 'label' not in df_train.columns:
+            logger.warning("Missing required columns in training data")
+            return None
+        
+        # Get unique labels
+        labels = sorted(df_train['label'].unique())
+        
+        # Sort files chronologically
+        month_files = sorted(df_train['file_name'].unique())
+        
+        # Calculate distribution per month
+        monthly_data = []
+        cumulative_counts = {label: 0 for label in labels}
+        cumulative_total = 0
+        
+        for month_file in month_files:
+            month_df = df_train[df_train['file_name'] == month_file]
+            
+            # Count per label for this month
+            label_counts = {}
+            for label in labels:
+                count = len(month_df[month_df['label'] == label])
+                label_counts[label] = count
+                cumulative_counts[label] += count
+            
+            # Total for this month
+            month_total = len(month_df)
+            cumulative_total += month_total
+            
+            # Create row
+            row = {
+                'month_file': month_file,
+                'month_total': month_total,
+                'cumulative_total': cumulative_total
+            }
+            
+            # Add per-label counts
+            for label in labels:
+                row[f'label_{label}_count'] = label_counts[label]
+                row[f'label_{label}_cumulative'] = cumulative_counts[label]
+            
+            monthly_data.append(row)
+        
+        df_monthly = pd.DataFrame(monthly_data)
+        return df_monthly, labels
+        
+    except Exception as e:
+        logger.error(f"Error calculating monthly distribution: {e}", exc_info=True)
+        return None
+
+
+def format_monthly_distribution_table(df_monthly, labels, project_name):
+    """
+    Format the monthly label distribution as a text table.
+    
+    Args:
+        df_monthly: DataFrame with monthly statistics
+        labels: List of label values
+        project_name: Name of the project
+        
+    Returns:
+        String with formatted table
+    """
+    if df_monthly is None or df_monthly.empty:
+        return f"No monthly distribution data available for {project_name}\n"
+    
+    lines = []
+    lines.append(f"\n{'='*80}")
+    lines.append(f"MONTHLY LABEL DISTRIBUTION - {project_name}")
+    lines.append(f"{'='*80}")
+    
+    # Create header
+    header_parts = ["Month"]
+    for label in labels:
+        header_parts.append(f"L{label}")
+        header_parts.append(f"CumL{label}")
+    header_parts.extend(["Total", "CumTotal"])
+    
+    lines.append(" | ".join(f"{h:>12}" for h in header_parts))
+    lines.append("-" * (15 * len(header_parts)))
+    
+    # Add data rows
+    for _, row in df_monthly.iterrows():
+        month = row['month_file'].replace('.csv', '')
+        row_parts = [f"{month:>12}"]
+        
+        for label in labels:
+            count = int(row[f'label_{label}_count'])
+            cum_count = int(row[f'label_{label}_cumulative'])
+            row_parts.append(f"{count:>12}")
+            row_parts.append(f"{cum_count:>12}")
+        
+        total = int(row['month_total'])
+        cum_total = int(row['cumulative_total'])
+        row_parts.append(f"{total:>12}")
+        row_parts.append(f"{cum_total:>12}")
+        
+        lines.append(" | ".join(row_parts))
+    
+    lines.append("="*80)
+    lines.append(f"Legend: L{labels[0]}/L{labels[1]} = Label counts, CumL = Cumulative label counts")
+    lines.append(f"Total = Total samples in month, CumTotal = Cumulative total samples")
+    lines.append("")
+    
+    return "\n".join(lines)
+
+
+def save_monthly_distribution_csv(df_monthly, labels, project_name, output_path):
+    """
+    Save monthly distribution to CSV file.
+    
+    Args:
+        df_monthly: DataFrame with monthly statistics
+        labels: List of label values
+        project_name: Name of the project
+        output_path: Path to save CSV file
+    """
+    if df_monthly is None or df_monthly.empty:
+        logger.warning(f"No monthly distribution data to save for {project_name}")
+        return
+    
+    # Prepare data for CSV
+    csv_data = []
+    for _, row in df_monthly.iterrows():
+        csv_row = {
+            'project': project_name,
+            'month_file': row['month_file'],
+            'month_total': int(row['month_total']),
+            'cumulative_total': int(row['cumulative_total'])
+        }
+        
+        for label in labels:
+            csv_row[f'label_{label}_count'] = int(row[f'label_{label}_count'])
+            csv_row[f'label_{label}_cumulative'] = int(row[f'label_{label}_cumulative'])
+        
+        csv_data.append(csv_row)
+    
+    df_csv = pd.DataFrame(csv_data)
+    df_csv.to_csv(output_path, index=False)
+    logger.info(f"Monthly distribution saved to: {output_path}")
+
+
 def format_latex_table(stats_list):
     """
     Format the statistics as a LaTeX table.
@@ -258,6 +447,16 @@ Examples:
         "--output-csv",
         type=str,
         help="Output file for CSV format (optional)"
+    )
+    parser.add_argument(
+        "--monthly-distribution",
+        action="store_true",
+        help="Calculate and display monthly label distribution with cumulative counts"
+    )
+    parser.add_argument(
+        "--monthly-output-csv",
+        type=str,
+        help="Output file for monthly distribution CSV (optional)"
     )
     
     args = parser.parse_args()
@@ -334,6 +533,40 @@ Examples:
             writer.writeheader()
             writer.writerows(csv_data)
         logger.info(f"\nCSV saved to: {args.output_csv}")
+    
+    # Calculate and display monthly distribution if requested
+    if args.monthly_distribution:
+        for config_path in args.configs:
+            try:
+                config_manager = ConfigManager(config_path)
+                config = config_manager.get_config()
+                project_name = config['project_name']
+                
+                logger.info(f"\nCalculating monthly distribution for {project_name}...")
+                result = get_monthly_label_distribution(config_path)
+                
+                if result is not None:
+                    df_monthly, labels = result
+                    
+                    # Display the table
+                    table_output = format_monthly_distribution_table(df_monthly, labels, project_name)
+                    print(table_output)
+                    
+                    # Save to CSV if requested
+                    if args.monthly_output_csv:
+                        # Create filename with project name
+                        output_path = args.monthly_output_csv
+                        if len(args.configs) > 1:
+                            # Multiple configs - add project name to filename
+                            base, ext = output_path.rsplit('.', 1) if '.' in output_path else (output_path, 'csv')
+                            output_path = f"{base}_{project_name}.{ext}"
+                        
+                        save_monthly_distribution_csv(df_monthly, labels, project_name, output_path)
+                else:
+                    logger.warning(f"Could not calculate monthly distribution for {project_name}")
+                    
+            except Exception as e:
+                logger.error(f"Error calculating monthly distribution for {config_path}: {e}", exc_info=True)
 
 
 if __name__ == "__main__":
