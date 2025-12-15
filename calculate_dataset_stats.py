@@ -69,7 +69,8 @@ def get_dataset_stats(config_path):
         config_path: Path to the YAML configuration file
         
     Returns:
-        Dictionary with training_months, test_months, training_instances, test_instances
+        Dictionary with training_months, test_months, training_instances, test_instances,
+        training_month_files (list of file names), and test_month_files (list of file names)
     """
     # Load configuration
     config_manager = ConfigManager(config_path)
@@ -315,9 +316,23 @@ Examples:
     # Save CSV if requested
     if args.output_csv:
         with open(args.output_csv, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['project_name', 'training_months', 'test_months', 'training_instances', 'test_instances'])
+            # Prepare data for CSV (convert file lists to strings)
+            csv_data = []
+            for stats in stats_list:
+                csv_row = {
+                    'project_name': stats['project_name'],
+                    'training_months': stats['training_months'],
+                    'test_months': stats['test_months'],
+                    'training_instances': stats['training_instances'],
+                    'test_instances': stats['test_instances'],
+                    'training_month_files': ';'.join(stats['training_month_files']),
+                    'test_month_files': ';'.join(stats['test_month_files'])
+                }
+                csv_data.append(csv_row)
+            
+            writer = csv.DictWriter(f, fieldnames=['project_name', 'training_months', 'test_months', 'training_instances', 'test_instances', 'training_month_files', 'test_month_files'])
             writer.writeheader()
-            writer.writerows(stats_list)
+            writer.writerows(csv_data)
         logger.info(f"\nCSV saved to: {args.output_csv}")
 
 
