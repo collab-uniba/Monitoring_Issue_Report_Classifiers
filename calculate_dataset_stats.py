@@ -315,7 +315,8 @@ def format_monthly_distribution_table(df_monthly, labels, project_name):
     
     # Add data rows
     for _, row in df_monthly.iterrows():
-        month = row['month_file'].replace('.csv', '')
+        # Remove file extension using Path
+        month = Path(row['month_file']).stem
         row_parts = [f"{month:>12}"]
         
         for label in labels:
@@ -561,8 +562,13 @@ Examples:
                         output_path = args.monthly_output_csv
                         if len(args.configs) > 1:
                             # Multiple configs - add project name to filename
-                            base, ext = output_path.rsplit('.', 1) if '.' in output_path else (output_path, 'csv')
-                            output_path = f"{base}_{project_name}.{ext}"
+                            path_obj = Path(output_path)
+                            if path_obj.suffix:
+                                # Has extension
+                                output_path = str(path_obj.with_stem(f"{path_obj.stem}_{project_name}"))
+                            else:
+                                # No extension, add .csv
+                                output_path = f"{output_path}_{project_name}.csv"
                         
                         save_monthly_distribution_csv(df_monthly, labels, project_name, output_path)
                 else:
