@@ -95,7 +95,9 @@ def get_dataset_stats(config_path):
         'training_months': 0,
         'test_months': 0,
         'training_instances': 0,
-        'test_instances': 0
+        'test_instances': 0,
+        'training_month_files': [],
+        'test_month_files': []
     }
     
     # Check if data directory exists
@@ -140,9 +142,11 @@ def get_dataset_stats(config_path):
         
         # Count unique time periods in training data
         if 'file_name' in df_train.columns:
-            training_files = df_train['file_name'].unique()
+            training_files = sorted(df_train['file_name'].unique())
             stats['training_months'] = len(training_files)
+            stats['training_month_files'] = training_files.tolist()
             logger.info(f"Training: {stats['training_months']} months, {stats['training_instances']} instances")
+            logger.info(f"Training month files: {', '.join(training_files)}")
         
     except Exception as e:
         logger.warning(f"Error loading training data: {e}")
@@ -167,9 +171,11 @@ def get_dataset_stats(config_path):
         
         # Count unique time periods in test data
         if 'file_name' in df_test.columns:
-            test_files = df_test['file_name'].unique()
+            test_files = sorted(df_test['file_name'].unique())
             stats['test_months'] = len(test_files)
+            stats['test_month_files'] = test_files.tolist()
             logger.info(f"Test: {stats['test_months']} months, {stats['test_instances']} instances")
+            logger.info(f"Test month files: {', '.join(test_files)}")
             
     except Exception as e:
         logger.warning(f"Error loading test data: {e}")
@@ -279,6 +285,18 @@ Examples:
         print(f"  Test Months: {stats['test_months']}")
         print(f"  Training Instances: {stats['training_instances']}")
         print(f"  Test Instances: {stats['test_instances']}")
+        
+        # Display training month files for debugging
+        if stats['training_month_files']:
+            print(f"  Training Month Files:")
+            for i, month_file in enumerate(stats['training_month_files'], 1):
+                print(f"    {i}. {month_file}")
+        
+        # Display test month files for debugging
+        if stats['test_month_files']:
+            print(f"  Test Month Files:")
+            for i, month_file in enumerate(stats['test_month_files'], 1):
+                print(f"    {i}. {month_file}")
     
     # Generate LaTeX table
     latex_table = format_latex_table(stats_list)
