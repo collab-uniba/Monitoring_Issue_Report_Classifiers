@@ -27,10 +27,9 @@ Note: If data files are not available, the script will provide estimates
 """
 
 import argparse
+import csv
 import logging
 from pathlib import Path
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
 import pandas as pd
 import yaml
 
@@ -46,10 +45,18 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_months(start_year, start_month, end_year, end_month):
-    """Calculate the number of months between two dates."""
-    start_date = datetime(start_year, start_month, 1)
-    end_date = datetime(end_year, end_month, 1)
+    """
+    Calculate the number of months between two dates (inclusive).
     
+    Args:
+        start_year: Starting year
+        start_month: Starting month (1-12)
+        end_year: Ending year
+        end_month: Ending month (1-12)
+    
+    Returns:
+        Number of months in the range (inclusive)
+    """
     months = (end_year - start_year) * 12 + (end_month - start_month) + 1
     return months
 
@@ -96,14 +103,14 @@ def get_dataset_stats(config_path):
     
     if not data_dir.exists():
         logger.warning(f"Data directory not found: {data_dir}")
-        logger.warning(f"Cannot calculate actual statistics without data files.")
-        logger.info(f"")
-        logger.info(f"To get accurate statistics, ensure data is prepared by running:")
+        logger.warning("Cannot calculate actual statistics without data files.")
+        logger.info("")
+        logger.info("To get accurate statistics, ensure data is prepared by running:")
         logger.info(f"  python data-preparation/create_time_windows.py --split-type {split_type} --range {range_val}")
-        logger.info(f"")
+        logger.info("")
         logger.info(f"Total months in configuration range: {total_months}")
-        logger.info(f"However, actual training/test splits depend on data availability.")
-        logger.info(f"")
+        logger.info("However, actual training/test splits depend on data availability.")
+        logger.info("")
         # Return zero counts to indicate missing data
         stats['training_months'] = 0
         stats['test_months'] = 0
@@ -289,7 +296,6 @@ Examples:
     
     # Save CSV if requested
     if args.output_csv:
-        import csv
         with open(args.output_csv, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=['project_name', 'training_months', 'test_months', 'training_instances', 'test_instances'])
             writer.writeheader()
